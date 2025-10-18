@@ -92,6 +92,14 @@ theme_override_font_sizes/font_size = 18
 text = "Request sent!"
 horizontal_alignment = 1
 
+[node name="LoadingLabel" type="Label" parent="InputDialog/Container"]
+visible = false
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+theme_override_colors/font_color = Color(1, 0.8, 0.2, 1)
+text = "Generating quests..."
+horizontal_alignment = 1
+
 [node name="CloseHint" type="Label" parent="InputDialog/Container"]
 layout_mode = 2
 text = "Press ESC to close"
@@ -213,3 +221,132 @@ layout_mode = 2
 layout_mode = 2
 text = "Press Q or ESC to close"
 horizontal_alignment = 1
+
+[node name="ToastNotification" type="Panel" parent="."]
+visible = false
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -280.0
+offset_top = 20.0
+offset_right = -20.0
+offset_bottom = 120.0
+grow_horizontal = 0
+
+[node name="Container" type="VBoxContainer" parent="ToastNotification"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 10.0
+offset_top = 10.0
+offset_right = -10.0
+offset_bottom = -10.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Title" type="Label" parent="ToastNotification/Container"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "Quest Complete!"
+horizontal_alignment = 1
+
+[node name="Spacer" type="Control" parent="ToastNotification/Container"]
+custom_minimum_size = Vector2(0, 5)
+layout_mode = 2
+
+[node name="QuestTitle" type="Label" parent="ToastNotification/Container"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+text = "Quest Name"
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[node name="Rewards" type="Label" parent="ToastNotification/Container"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+theme_override_colors/font_color = Color(1, 0.8, 0.2, 1)
+text = "+100 XP  +50 Gold"
+horizontal_alignment = 1
+
+[node name="Spacer2" type="Control" parent="ToastNotification/Container"]
+custom_minimum_size = Vector2(0, 5)
+layout_mode = 2
+
+[node name="DismissButton" type="Button" parent="ToastNotification/Container"]
+layout_mode = 2
+text = "OK"
+
+[node name="LevelUpPanel" type="Panel" parent="."]
+visible = false
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -300.0
+offset_top = -200.0
+offset_right = 300.0
+offset_bottom = 200.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Container" type="VBoxContainer" parent="LevelUpPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 20.0
+offset_top = 20.0
+offset_right = -20.0
+offset_bottom = -20.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Title" type="Label" parent="LevelUpPanel/Container"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 48
+theme_override_colors/font_color = Color(1, 0.8, 0.2, 1)
+text = "LEVEL UP!"
+horizontal_alignment = 1
+
+[node name="Spacer1" type="Control" parent="LevelUpPanel/Container"]
+custom_minimum_size = Vector2(0, 20)
+layout_mode = 2
+
+[node name="LevelInfo" type="Label" parent="LevelUpPanel/Container"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 36
+text = "Level 3 → 4"
+horizontal_alignment = 1
+
+[node name="Spacer2" type="Control" parent="LevelUpPanel/Container"]
+custom_minimum_size = Vector2(0, 30)
+layout_mode = 2
+
+[node name="QuestTitle" type="Label" parent="LevelUpPanel/Container"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "Quest: \"Task Name\""
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[node name="Spacer3" type="Control" parent="LevelUpPanel/Container"]
+custom_minimum_size = Vector2(0, 10)
+layout_mode = 2
+
+[node name="Rewards" type="Label" parent="LevelUpPanel/Container"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 24
+theme_override_colors/font_color = Color(0.3, 1, 0.3, 1)
+text = "+200 XP    +100 Gold"
+horizontal_alignment = 1
+
+[node name="Spacer4" type="Control" parent="LevelUpPanel/Container"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="DismissButton" type="Button" parent="LevelUpPanel/Container"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 24
+text = "Continue"

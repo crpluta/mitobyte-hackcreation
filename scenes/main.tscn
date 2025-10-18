@@ -7,6 +7,7 @@
 [ext_resource type="Script" path="res://scripts/npc_spawner.gd" id="5_spawner"]
 [ext_resource type="PackedScene" uid="uid://c8rqk5n2vm3wh" path="res://scenes/quest_giver.tscn" id="6_quest_giver"]
 [ext_resource type="PackedScene" uid="uid://c3m4st3rgr0k" path="res://scenes/grindmaster_grok.tscn" id="7_grok"]
+[ext_resource type="PackedScene" uid="uid://npc5h4ck" path="res://scenes/npc_shack.tscn" id="8_shack"]
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_ground"]
 size = Vector2(50, 50)
@@ -46,6 +47,9 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 0, 5)
 
 [node name="GrindmasterGrok" parent="NPCs" instance=ExtResource("7_grok")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5, 0, 5)
+
+[node name="SpawnShack" parent="NPCs" instance=ExtResource("8_shack")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -20)
 
 [node name="QuestGiverSpawner" type="Node3D" parent="NPCs"]
 script = ExtResource("5_spawner")

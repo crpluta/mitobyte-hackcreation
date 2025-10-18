@@ -1,7 +1,8 @@
 extends CharacterBody3D
 
 # Player movement constants
-const SPEED = 5.0
+const SPEED = 7.0  # Base speed (increased from 5.0)
+const SPRINT_MULTIPLIER = 3.0  # Sprint speed multiplier (hold Shift)
 const FIXED_Y_POSITION = 1.0
 
 func _ready():
@@ -16,13 +17,17 @@ func _physics_process(_delta):
 	# Movement in screen space (X is left/right, Z is up/down on screen)
 	var direction = Vector3(input_dir.x, 0, input_dir.y).normalized()
 
+	# Check for sprint (Shift key)
+	var is_sprinting = Input.is_key_pressed(KEY_SHIFT)
+	var current_speed = SPEED * SPRINT_MULTIPLIER if is_sprinting else SPEED
+
 	# Apply movement
 	if direction:
-		velocity.x = direction.x * SPEED
-		velocity.z = direction.z * SPEED
+		velocity.x = direction.x * current_speed
+		velocity.z = direction.z * current_speed
 	else:
-		velocity.x = move_toward(velocity.x, 0, SPEED)
-		velocity.z = move_toward(velocity.z, 0, SPEED)
+		velocity.x = move_toward(velocity.x, 0, current_speed)
+		velocity.z = move_toward(velocity.z, 0, current_speed)
 
 	# Lock Y position (no vertical movement)
 	velocity.y = 0

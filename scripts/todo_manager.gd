@@ -326,3 +326,21 @@ func get_player_stats() -> Dictionary:
 		"accepted_count": accepted_quests.size(),
 		"completed_count": completed_quests.size()
 	}
+
+func reset_game_state():
+	"""Reset all game state for demo purposes"""
+	print("Resetting game state...")
+
+	# Clear all quest data
+	all_todos.clear()
+	accepted_quests.clear()
+	completed_tasks.clear()
+	completed_quests.clear()
+	quest_types.clear()
+
+	# Reset player stats
+	player_xp = 0
+	player_gold = 0
+	player_level = 1
+
+	print("Game state reset complete")

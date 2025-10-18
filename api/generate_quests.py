@@ -380,8 +380,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         help="Favor speed: keep model but cap output length for faster responses",
     )
     p.add_argument("--difficulty", help="Optional overall difficulty hint (e.g., easy, medium, hard)")
-    # File output is deprecated; script always prints JSON to stdout.
-    p.add_argument("--out", "-o", required=False, help="(Deprecated) Ignored. Script prints JSON to stdout.")
+    p.add_argument("--output", "-o", required=False, help="Optional: write JSON to this file instead of stdout")
     p.add_argument("--show-prompt", action="store_true", help="Print the constructed prompt and exit (dry run)")
 
     args = p.parse_args(argv)
@@ -445,10 +444,18 @@ def main(argv: Optional[List[str]] = None) -> int:
     # No progress field generation
     _prune_fields_one(quest)
 
-    # Always print JSON to stdout; never write files.
-    if args.out:
-        print("Note: --out is deprecated and ignored; printing to stdout", file=sys.stderr)
-    print(json.dumps(quest, ensure_ascii=False, indent=2))
+    # Write JSON to file or print to stdout
+    json_output = json.dumps(quest, ensure_ascii=False, indent=2)
+
+    if args.output:
+        # Write to file for non-blocking Godot integration
+        with open(args.output, "w", encoding="utf-8") as f:
+            f.write(json_output)
+        print(f"Quest written to: {args.output}", file=sys.stderr)
+    else:
+        # Print to stdout (original behavior)
+        print(json_output)
+
     return 0
 
 

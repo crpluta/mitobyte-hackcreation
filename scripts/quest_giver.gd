@@ -14,10 +14,19 @@ var quest_id: String = ""
 var player: Node3D = null
 var is_player_in_range: bool = false
 
+# Movement
+enum State { WALKING_TO_LOCATION, AT_LOCATION, WALKING_TO_SHACK }
+var current_state = State.WALKING_TO_LOCATION
+var target_position: Vector3 = Vector3.ZERO
+var shack_position: Vector3 = Vector3.ZERO
+const WALK_SPEED = 3.0
+const ARRIVAL_THRESHOLD = 0.2
+
 # Signals
 signal player_entered_range
 signal player_exited_range
 signal interaction_triggered
+signal reached_shack
 
 # Colors for quest states - ONE-TIME QUESTS (green family)
 const COLOR_ONETIME_AVAILABLE = Color(0.2, 0.8, 0.2)     # Green
@@ -31,6 +40,12 @@ const COLOR_DAILY_COMPLETE = Color(0.4, 0.9, 1.0)        # Bright Blue
 
 func _ready():
 	player = get_tree().get_first_node_in_group("player")
+
+	# Create unique material instance for this NPC (not shared!)
+	var new_material = StandardMaterial3D.new()
+	mesh.set_surface_override_material(0, new_material)
+	material = new_material
+
 	update_visual_state()
 
 func setup_quest(todo: Dictionary, id: String):
@@ -38,25 +53,43 @@ func setup_quest(todo: Dictionary, id: String):
 	quest_id = id
 	update_visual_state()
 
-func _process(_delta):
-	if not player:
-		return
+func _process(delta):
+	# Handle movement based on state
+	match current_state:
+		State.WALKING_TO_LOCATION:
+			_move_towards(target_position, delta)
+			if global_position.distance_to(target_position) < ARRIVAL_THRESHOLD:
+				current_state = State.AT_LOCATION
+				print("NPC reached quest location: ", quest_id)
 
-	# Check distance to player
-	var distance = global_position.distance_to(player.global_position)
-	var in_range = distance <= interaction_range
+		State.AT_LOCATION:
+			# Check distance to player (only when at location)
+			if player:
+				var distance = global_position.distance_to(player.global_position)
+				var in_range = distance <= interaction_range
 
-	# Update state
-	if in_range and not is_player_in_range:
-		is_player_in_range = true
-		player_entered_range.emit()
-	elif not in_range and is_player_in_range:
-		is_player_in_range = false
-		player_exited_range.emit()
+				# Update state
+				if in_range and not is_player_in_range:
+					is_player_in_range = true
+					player_entered_range.emit()
+				elif not in_range and is_player_in_range:
+					is_player_in_range = false
+					player_exited_range.emit()
 
-	# Check for interaction input
-	if is_player_in_range and Input.is_action_just_pressed("interact"):
-		interaction_triggered.emit()
+				# Check for interaction input
+				if is_player_in_range and Input.is_action_just_pressed("interact"):
+					interaction_triggered.emit()
+
+		State.WALKING_TO_SHACK:
+			_move_towards(shack_position, delta)
+			if global_position.distance_to(shack_position) < ARRIVAL_THRESHOLD:
+				print("NPC reached shack: ", quest_id)
+				reached_shack.emit()
+
+func _move_towards(target: Vector3, delta: float):
+	var direction = (target - global_position).normalized()
+	global_position += direction * WALK_SPEED * delta
+	global_position.y = 0.0  # Keep on ground
 
 func update_visual_state():
 	if quest_id.is_empty():
@@ -69,11 +102,6 @@ func update_visual_state():
 
 	# Get quest type (daily or one_time)
 	var quest_type = TodoManager.get_quest_type(quest_id)
-
-	# Create material if needed
-	if not material:
-		material = StandardMaterial3D.new()
-		mesh.set_surface_override_material(0, material)
 
 	# Select colors based on quest type
 	var color_available: Color
@@ -135,3 +163,15 @@ func get_interaction_prompt() -> String:
 			"turned_in":
 				return ""  # No interaction for completed quests
 	return ""
+
+func set_movement_targets(quest_location: Vector3, shack_loc: Vector3):
+	"""Set where NPC should walk to and where the shack is"""
+	target_position = quest_location
+	shack_position = shack_loc
+	current_state = State.WALKING_TO_LOCATION
+
+func start_return_to_shack():
+	"""Trigger NPC to walk back to shack after quest completion"""
+	print("NPC starting return journey to shack: ", quest_id)
+	current_state = State.WALKING_TO_SHACK
+	is_player_in_range = false  # Disable interaction during return

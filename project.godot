@@ -7,7 +7,7 @@
 
 config/name="Todo Quest"
 config/description="A 3D gamified todo tracker - Hackathon Project"
-run/main_scene="res://scenes/main.tscn"
+run/main_scene="res://scenes/title_screen.tscn"
 config/features=PackedStringArray("4.4", "Forward Plus")
 config/icon="res://icon.svg"
 

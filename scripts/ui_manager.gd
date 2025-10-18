@@ -6,6 +6,7 @@ extends CanvasLayer
 @onready var text_input = $InputDialog/Container/TextInput
 @onready var submit_button = $InputDialog/Container/SubmitButton
 @onready var confirmation_label = $InputDialog/Container/ConfirmationLabel
+@onready var loading_label = $InputDialog/Container/LoadingLabel
 
 @onready var quest_dialog = $QuestDialog
 @onready var quest_title = $QuestDialog/Container/QuestTitle
@@ -16,6 +17,17 @@ extends CanvasLayer
 @onready var quest_log = $QuestLog
 @onready var quest_list_container = $QuestLog/Container/ScrollContainer/QuestList
 
+@onready var toast_notification = $ToastNotification
+@onready var toast_quest_title = $ToastNotification/Container/QuestTitle
+@onready var toast_rewards = $ToastNotification/Container/Rewards
+@onready var toast_dismiss_button = $ToastNotification/Container/DismissButton
+
+@onready var levelup_panel = $LevelUpPanel
+@onready var levelup_level_info = $LevelUpPanel/Container/LevelInfo
+@onready var levelup_quest_title = $LevelUpPanel/Container/QuestTitle
+@onready var levelup_rewards = $LevelUpPanel/Container/Rewards
+@onready var levelup_dismiss_button = $LevelUpPanel/Container/DismissButton
+
 # Current quest interaction
 var current_quest_npc: Node3D = null
 var current_quest_id: String = ""
@@ -23,6 +35,11 @@ var current_quest_data: Dictionary = {}
 
 # Track which NPC opened the dialog (for quest_type)
 var current_input_quest_type: String = "one_time"  # default
+
+# Background process for LLM
+var llm_process_id: int = -1
+var llm_output_file: String = ""
+var llm_quest_type: String = ""
 
 func _ready():
 	print("UI Manager initialized")
@@ -52,12 +69,19 @@ func _ready():
 	submit_button.pressed.connect(_on_submit_pressed)
 	quest_action_button.pressed.connect(_on_quest_action_pressed)
 
+	# Connect notification dismiss buttons
+	toast_dismiss_button.pressed.connect(_on_toast_dismiss)
+	levelup_dismiss_button.pressed.connect(_on_levelup_dismiss)
+
 func hide_all():
 	interaction_prompt.hide()
 	input_dialog.hide()
 	confirmation_label.hide()
+	loading_label.hide()
 	quest_dialog.hide()
 	quest_log.hide()
+	toast_notification.hide()
+	levelup_panel.hide()
 
 func _on_npc_entered_range(npc_name: String):
 	interaction_prompt.text = "Press E to talk to %s" % npc_name
@@ -86,6 +110,7 @@ func _on_npc_interaction(quest_type: String):
 func show_input_dialog():
 	input_dialog.show()
 	confirmation_label.hide()
+	loading_label.hide()
 	text_input.text = ""
 	text_input.grab_focus()
 
@@ -101,24 +126,29 @@ func _on_submit_pressed():
 		confirmation_label.show()
 		return
 
-	# Save to file for LLM team
-	save_user_input(user_text)
-
-	# Show confirmation
-	confirmation_label.text = "Request sent! Quest-givers will appear soon..."
-	confirmation_label.add_theme_color_override("font_color", Color(0.3, 1, 0.3))
-	confirmation_label.show()
+	# Show loading
+	confirmation_label.hide()
+	loading_label.show()
+	submit_button.disabled = true
 
 	# Clear input
 	text_input.text = ""
 
-	# Auto-close after 2 seconds (use process_always timer)
-	await get_tree().create_timer(2.0, true, false, true).timeout
-	input_dialog.hide()
-	interaction_prompt.show()
-
-	# Unpause the game
+	# UNPAUSE IMMEDIATELY so background process can run!
 	get_tree().paused = false
+
+	# Wait one frame for UI to update
+	await get_tree().process_frame
+
+	# Save to file and call LLM in background (non-blocking!)
+	save_user_input(user_text)
+
+	# Auto-close after 1 second
+	await get_tree().create_timer(1.0, true, false, true).timeout
+	input_dialog.hide()
+	loading_label.hide()
+	interaction_prompt.show()
+	submit_button.disabled = false
 
 func save_user_input(text: String):
 	# Save to appropriate file based on quest type
@@ -136,38 +166,64 @@ func save_user_input(text: String):
 		print("Failed to save user input!")
 
 func call_llm_script(input_file: String, quest_type: String):
-	"""Call the LLM Python script and import the generated quests"""
-
-	# Convert res:// path to absolute path
+	"""Call the LLM Python script non-blocking via background process"""
 	var abs_input_path = ProjectSettings.globalize_path(input_file)
 	var script_path = ProjectSettings.globalize_path("res://api/generate_quests.py")
 
-	print("Calling LLM script: ", script_path)
-	print("Input file: ", abs_input_path)
+	# Create temp output file path
+	llm_output_file = ProjectSettings.globalize_path("res://temp_quest_output.json")
+	llm_quest_type = quest_type
 
-	# Call Python script: python api/generate_quests.py --input user_input_onetime.txt
-	var output = []
-	var exit_code = OS.execute("python", [script_path, "--input", abs_input_path], output, true, false)
+	# Delete old output file if exists
+	if FileAccess.file_exists(llm_output_file):
+		DirAccess.remove_absolute(llm_output_file)
 
-	if exit_code != 0:
-		print("ERROR: Python script failed with exit code: ", exit_code)
-		print("Output: ", output)
+	print("Starting Python script in background...")
+	print("Input: ", abs_input_path)
+	print("Output will be written to: ", llm_output_file)
+
+	# Start process with output redirection to file
+	var args = [script_path, "--input", abs_input_path, "--output", llm_output_file]
+	llm_process_id = OS.create_process("python", args)
+
+	if llm_process_id == -1:
+		print("ERROR: Failed to start Python process!")
 		return
 
-	# output is an array with stdout
-	if output.is_empty():
-		print("ERROR: No output from Python script")
+	print("Python process started with PID: ", llm_process_id)
+
+	# Start polling for completion
+	_poll_for_llm_completion()
+
+func _poll_for_llm_completion():
+	"""Poll for output file creation (non-blocking)"""
+	# Check if output file exists
+	if FileAccess.file_exists(llm_output_file):
+		print("Quest generation complete! Loading results...")
+
+		# Read the output file
+		var file = FileAccess.open(llm_output_file, FileAccess.READ)
+		if file:
+			var json_output = file.get_as_text()
+			file.close()
+
+			print("Received JSON (length: %d)" % json_output.length())
+
+			# Import quests
+			var success = TodoManager.import_quests_from_json(json_output, llm_quest_type)
+			if success:
+				print("Successfully imported %s quests!" % llm_quest_type)
+			else:
+				print("Failed to import quests")
+
+			# Clean up
+			DirAccess.remove_absolute(llm_output_file)
+			llm_process_id = -1
 		return
 
-	var json_output = output[0]  # First element is stdout
-	print("Received JSON from LLM script (length: %d)" % json_output.length())
-
-	# Import quests into TodoManager
-	var success = TodoManager.import_quests_from_json(json_output, quest_type)
-	if success:
-		print("Successfully imported %s quests!" % quest_type)
-	else:
-		print("Failed to import quests from LLM output")
+	# Still running, check again soon
+	await get_tree().create_timer(0.2, true, false, true).timeout
+	_poll_for_llm_completion()
 
 func _input(event):
 	if input_dialog.visible and event.is_action_pressed("ui_cancel"):
@@ -262,12 +318,25 @@ func _on_quest_action_pressed():
 			get_tree().paused = false
 			print("Quest accepted: ", current_quest_data.get("title", ""))
 		"complete":
-			# Turn in the quest
+			# Turn in the quest - capture level before completion
+			var old_level = TodoManager.player_level
+			var rewards = current_quest_data.get("rewards", {})
+			var xp = rewards.get("xp", 0)
+			var coins = rewards.get("coins", 0)
+			var quest_title = current_quest_data.get("title", "Unknown Quest")
+
 			TodoManager.complete_quest(current_quest_id)
 			quest_dialog.hide()
-			get_tree().paused = false
-			print("Quest completed: ", current_quest_data.get("title", ""))
-			# TODO: Show reward notification
+			get_tree().paused = false  # Unpause immediately
+
+			# Check if leveled up
+			var new_level = TodoManager.player_level
+			if new_level > old_level:
+				show_levelup_notification(quest_title, old_level, new_level, xp, coins)
+			else:
+				show_toast_notification(quest_title, xp, coins)
+
+			print("Quest completed: ", quest_title)
 
 func toggle_quest_log():
 	if quest_log.visible:
@@ -354,3 +423,52 @@ func _on_task_checkbox_toggled(quest_id: String, task_id: String, checked: bool)
 	TodoManager.toggle_task(quest_id, task_id)
 	# Refresh the quest log to show updated state
 	populate_quest_log()
+
+func show_toast_notification(quest_name: String, xp: int, coins: int):
+	"""Show small toast notification for normal quest completion"""
+	toast_quest_title.text = quest_name
+	toast_rewards.text = "+%d XP  +%d Gold" % [xp, coins]
+
+	# Show with fade-in animation (non-blocking)
+	toast_notification.modulate.a = 0.0
+	toast_notification.show()
+
+	var tween = create_tween()
+	tween.tween_property(toast_notification, "modulate:a", 1.0, 0.3)
+
+	# Auto-dismiss after 3 seconds
+	_auto_dismiss_toast()
+
+func show_levelup_notification(quest_name: String, old_level: int, new_level: int, xp: int, coins: int):
+	"""Show dramatic level-up panel"""
+	levelup_level_info.text = "Level %d → %d" % [old_level, new_level]
+	levelup_quest_title.text = "Quest: \"%s\"" % quest_name
+	levelup_rewards.text = "+%d XP    +%d Gold" % [xp, coins]
+
+	# Show with scale animation (non-blocking)
+	levelup_panel.scale = Vector2(0.8, 0.8)
+	levelup_panel.modulate.a = 0.0
+	levelup_panel.show()
+
+	var tween = create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(levelup_panel, "scale", Vector2(1.0, 1.0), 0.4).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tween.tween_property(levelup_panel, "modulate:a", 1.0, 0.3)
+
+func _auto_dismiss_toast():
+	"""Auto-dismiss toast after delay"""
+	await get_tree().create_timer(3.0, true, false, true).timeout
+	if toast_notification.visible:  # Only dismiss if still visible
+		_on_toast_dismiss()
+
+func _on_toast_dismiss():
+	"""Dismiss toast notification"""
+	var tween = create_tween()
+	tween.tween_property(toast_notification, "modulate:a", 0.0, 0.2)
+	tween.tween_callback(toast_notification.hide)
+
+func _on_levelup_dismiss():
+	"""Dismiss level-up notification"""
+	var tween = create_tween()
+	tween.tween_property(levelup_panel, "modulate:a", 0.0, 0.2)
+	tween.tween_callback(levelup_panel.hide)
