@@ -16,7 +16,14 @@ SYSTEM_INSTRUCTIONS = (
     "If the user input is not clear ask for clarity and wait to generate tasks until clear input. "
     "Make a user input need to be at least 3 characters and alert the user if they need to update their input. "
     "Do not generate a quest if the user input text is less than 3 characters. "
-    "If the user enters gibberish please ask for clarity so that the quests is clear and simple tasks."
+    "If the user enters gibberish please ask for clarity so that the quests is clear and simple tasks. "
+    "ALWAYS split compound items into multiple atomic tasks: one clear action per task. "
+    "Detect conjunctions or multiple verbs (e.g., 'and', 'then', '&', commas) and separate them into distinct tasks. "
+    "Avoid 'and/then/&' inside a single task; prefer two shorter tasks instead. "
+    "Tasks must never use first person (no 'I', 'I'm', 'my'); use imperative verb-first phrasing (e.g., 'Finish Documentation'). "
+    "Do NOT invent new tasks: only include tasks explicitly provided by the user (you may split compound items into multiple atomic tasks, but do not add actions beyond those items). "
+    "Title style: concise D&D-flavored tone (3-6 words), generic and non-specific (no proper nouns or setting lore). "
+    "Description style: NPC quest-giver directive written as a short story in a medieval setting (3-6 sentences). Provide brief background and establish context, address the player as 'you', and keep within the scope of the tasks without adding new requirements."
 )
 
 
@@ -142,6 +149,65 @@ def _parse_tasks(content: str) -> List[str]:
     return tasks
 
 
+def _split_atomic_tasks(items: List[str]) -> List[str]:
+    # Split compound items into atomic tasks using simple conjunction and punctuation heuristics
+    out: List[str] = []
+    for raw in items or []:
+        if not raw:
+            continue
+        parts = re.split(r"\b(?:and|then)\b|&|,", raw, flags=re.IGNORECASE)
+        for p in parts:
+            txt = (p or "").strip()
+            # Strip leading list markers again if any
+            for prefix in ("- ", "* ", "+ ", "• "):
+                if txt.startswith(prefix):
+                    txt = txt[len(prefix):].strip()
+            if txt:
+                out.append(txt)
+    # De-duplicate while preserving order (case-insensitive, whitespace-normalized)
+    seen = set()
+    unique: List[str] = []
+    for t in out:
+        key = re.sub(r"\s+", " ", t.strip().lower())
+        if key and key not in seen:
+            seen.add(key)
+            unique.append(t.strip())
+    return unique
+
+
+def _normalize_task_phrase(text: str) -> str:
+    # Remove common first-person lead-ins and convert to imperative phrase
+    s = (text or "").strip()
+    low = s.lower()
+    patterns = [
+        "i need to ",
+        "i have to ",
+        "i must ",
+        "i should ",
+        "i will ",
+        "i'm going to ",
+        "im going to ",
+        "i am going to ",
+        "i wanna ",
+        "i want to ",
+        "i'd like to ",
+        "i got to ",
+        "i gotta ",
+    ]
+    for p in patterns:
+        if low.startswith(p):
+            s = s[len(p):]
+            break
+    # Remove any leading 'to ' remnants
+    s = re.sub(r"^(to\s+)+", "", s, flags=re.IGNORECASE)
+    # Remove first-person possessives like 'my '
+    s = re.sub(r"\bmy\s+", "", s, flags=re.IGNORECASE)
+    s = s.strip().strip(".!")
+    # Capitalize each word (simple title case)
+    words = [w.capitalize() for w in re.split(r"\s+", s) if w]
+    return " ".join(words)
+
+
 def _looks_like_gibberish(text: str) -> bool:
     # Tokenize alphabetical words
     words = re.findall(r"[A-Za-z]+", text)
@@ -198,7 +264,15 @@ def _build_messages(tasks: List[str], difficulty_hint: Optional[str]) -> List[Di
         "- Output STRICT JSON only (no markdown).",
         "- Consolidate all tasks under this one quest.",
         "- Provide reasonable 'difficulty' and 'rewards'.",
-        "- Use concise titles and descriptions.",
+        "- Use concise titles and descriptions; avoid any time constraints in the title or description.",
+        "- Keep each task's wording strictly within the provided scope; avoid speculative details.",
+        "- Tasks must never use first person (no 'I', 'I'm', 'my'); use imperative verb-first phrasing (e.g., 'Finish Documentation').",
+        "- Title style: concise D&D-flavored tone (3-6 words), generic and non-specific (no proper nouns or setting lore).",
+        "- Description style: NPC quest-giver directive as a short medieval story (3-6 sentences) addressing 'you'; give brief background and context without adding new requirements.",
+        "- Break compound items into multiple atomic tasks: one action per task.",
+        "- If an item contains 'and', 'then', '&' or multiple verbs, split it into separate tasks.",
+        "- Do not combine multiple actions in one task; prefer two shorter tasks instead.",
+        "- Do NOT invent new tasks: only include tasks explicitly provided by the user; you may split compound items but must not add actions beyond them.",
     ]
     if difficulty_hint:
         user_lines.append(f"- Overall difficulty hint: {difficulty_hint}")
@@ -254,6 +328,50 @@ def call_ollama(messages: List[Dict[str, str]], model: str, host: str, temperatu
     except Exception:
         # Fallback for generate-like response shape
         return resp.get("response", "")
+
+
+def _restyle_title_and_description(
+    quest: Dict[str, Any], host: str, model: str, base_temperature: float
+) -> None:
+    """
+    Second-pass rewrite to ensure D&D NPC flavor for title/description.
+    Only touches 'title' and 'description'.
+    """
+    title = (quest.get("title") or "").strip()
+    description = (quest.get("description") or "").strip()
+    tasks = [t.get("text") or "" for t in (quest.get("tasks") or [])]
+
+    sys_txt = (
+        "Rewrite only 'title' and 'description'. Output STRICT JSON with keys 'title' and 'description' only. "
+        "Title: concise D&D-flavored tone (3-6 words), generic and non-specific (no proper nouns or setting lore). "
+        "Description: NPC quest-giver directive written as a short medieval story (3-6 sentences). Provide brief background and establish context, address the player as 'you', and do NOT add requirements beyond the tasks. "
+        "Example: {\"title\": \"Quill and Quiet Resolve\", \"description\": \"You arrive at a dim-lit scriptorium, where an old scribe beckons. 'You,' he rasps, 'must set your thoughts in order upon the page, then set your body to motion, lest the day grow dull and your spirit heavy.'\"}."
+    )
+    user_lines = [
+        "Current values:",
+        json.dumps({"title": title, "description": description}, ensure_ascii=False),
+        "Tasks:",
+    ]
+    for i, t in enumerate(tasks, 1):
+        if t:
+            user_lines.append(f"{i}. {t}")
+    messages = [
+        {"role": "system", "content": sys_txt},
+        {"role": "user", "content": "\n".join(user_lines)},
+    ]
+
+    raw = call_ollama(messages, model=model, host=host, temperature=min(0.7, max(0.3, base_temperature)), max_tokens=240)
+    try:
+        obj = json.loads(_extract_json(raw))
+        if isinstance(obj, dict):
+            new_title = (obj.get("title") or title).strip()
+            new_desc = (obj.get("description") or description).strip()
+            if new_title:
+                quest["title"] = new_title
+            if new_desc:
+                quest["description"] = new_desc
+    except Exception:
+        pass
 
 
 def _stable_id(text: str, prefix: str, salt: str = "") -> str:
@@ -317,7 +435,7 @@ def _normalize_quest(q: Dict[str, Any]) -> None:
 
 
 def _prune_fields_one(q: Dict[str, Any]) -> None:
-    for k in ["due_date", "prerequisites", "metadata", "category"]:
+    for k in ["due_date", "prerequisites", "metadata", "category", "clues"]:
         if k in q:
             q.pop(k, None)
     if isinstance(q.get("rewards"), dict):
@@ -334,6 +452,8 @@ def _prune_fields_one(q: Dict[str, Any]) -> None:
             t.pop("status", None)
         if "completed_at" in t:
             t.pop("completed_at", None)
+        if "clues" in t:
+            t.pop("clues", None)
 def _normalize_and_assign_ids(obj: Dict[str, Any]) -> None:
     quests = obj.get("quests") or []
     for q in quests:
@@ -414,7 +534,7 @@ def _prune_fields(root: Dict[str, Any]) -> None:
     # Remove fields we no longer support
     for q in root.get("quests", []) or []:
         # Drop deprecated quest-level fields
-        for k in ["due_date", "prerequisites", "category"]:
+        for k in ["due_date", "prerequisites", "category", "clues"]:
             if k in q:
                 q.pop(k, None)
         # Rewards: keep only xp, coins
@@ -430,6 +550,8 @@ def _prune_fields(root: Dict[str, Any]) -> None:
                 t.pop("status", None)
             if "completed_at" in t:
                 t.pop("completed_at", None)
+            if "clues" in t:
+                t.pop("clues", None)
 
 
     # Done-state updates removed for multi-quest structures as well
@@ -512,6 +634,15 @@ def main(argv: Optional[List[str]] = None) -> int:
         action="store_true",
         help="Favor speed: keep model but cap output length for faster responses",
     )
+    p.add_argument(
+        "--no-style",
+        action="store_true",
+        help="Skip the stylistic rewrite of title/description into D&D NPC dialogue",
+    )
+    p.add_argument(
+        "--style-model",
+        help="Optional model to use just for styling title/description; defaults to --model",
+    )
     p.add_argument("--difficulty", help="Optional overall difficulty hint (e.g., easy, medium, hard)")
     # File output is deprecated; script always prints JSON to stdout.
     p.add_argument("--out", "-o", required=False, help="(Deprecated) Ignored. Script prints JSON to stdout.")
@@ -550,7 +681,14 @@ def main(argv: Optional[List[str]] = None) -> int:
         print("Provide simple, meaningful task descriptions and retry.", file=sys.stderr)
         return 2
 
-    messages = _build_messages(tasks, args.difficulty)
+    # Split compound items into atomic tasks deterministically to avoid model inventing tasks
+    atomic_tasks = _split_atomic_tasks(tasks)
+    # Enforce imperative, non-first-person phrasing for tasks
+    atomic_tasks = [_normalize_task_phrase(t) for t in atomic_tasks]
+    if not atomic_tasks:
+        atomic_tasks = tasks
+
+    messages = _build_messages(atomic_tasks, args.difficulty)
 
     if args.show_prompt and tasks:
         # Print as a readable block
@@ -589,12 +727,21 @@ def main(argv: Optional[List[str]] = None) -> int:
             print(raw, file=sys.stderr)
             return 3
 
-    # Coerce to a single quest and normalize
+    # Coerce to a single quest, replace tasks with deterministic atomic tasks, and normalize
     quest = _coerce_to_single_quest(new_obj)
+    quest["tasks"] = [{"text": t} for t in atomic_tasks]
     _normalize_quest(quest)
     # No status/completed tracking
     # No progress field generation
     _prune_fields_one(quest)
+
+    # Optional second-pass style rewrite for title/description
+    if tasks and not args.no_style:
+        try:
+            style_model = args.style_model or selected_model
+            _restyle_title_and_description(quest, host=args.host, model=style_model, base_temperature=max(args.temperature, 0.4))
+        except Exception:
+            pass
 
     # Always print JSON to stdout; never write files.
     if args.out:
