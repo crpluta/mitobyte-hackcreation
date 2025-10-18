@@ -8,6 +8,9 @@ signal quest_accepted(quest_id: String)
 signal task_completed(quest_id: String, task_id: String)
 signal quest_completed(quest_id: String)
 
+# Game configuration
+var game_config: Dictionary = {}
+
 # Data storage
 var all_todos: Array = []  # Array of quest objects (with quest_type added internally)
 var accepted_quests: Dictionary = {}  # quest_id -> quest data
@@ -24,11 +27,62 @@ var player_level: int = 1
 
 func _ready():
 	print("TodoManager initialized")
+
+	# Load game configuration first
+	load_game_config()
+
 	# Load sample data initially
 	load_todos_from_file()
 
 	# TODO: Watch for todos_onetime.json and todos_daily.json changes
 	# For now, just load from sample-todos.json
+
+func load_game_config():
+	"""Load game configuration from game_config.json"""
+	var config_path = "res://game_config.json"
+
+	if not FileAccess.file_exists(config_path):
+		print("WARNING: game_config.json not found, using defaults")
+		_set_default_config()
+		return
+
+	var file = FileAccess.open(config_path, FileAccess.READ)
+	if not file:
+		print("ERROR: Failed to open game_config.json")
+		_set_default_config()
+		return
+
+	var json_string = file.get_as_text()
+	file.close()
+
+	var json = JSON.new()
+	var parse_result = json.parse(json_string)
+
+	if parse_result != OK:
+		print("ERROR: Failed to parse game_config.json: ", json.get_error_message())
+		_set_default_config()
+		return
+
+	game_config = json.data
+	print("Game configuration loaded successfully")
+
+func _set_default_config():
+	"""Fallback default configuration"""
+	game_config = {
+		"progression": {
+			"xp_per_level": 500,
+			"difficulty_rewards": {
+				"easy": {"xp": 100, "coins": 50},
+				"medium": {"xp": 200, "coins": 100},
+				"hard": {"xp": 400, "coins": 200},
+				"epic": {"xp": 800, "coins": 400}
+			}
+		},
+		"shop": {
+			"items": []
+		}
+	}
+	print("Using default game configuration")
 
 func load_todos_from_file(file_path: String = "res://todos.json"):
 	# Try todos.json first, fall back to sample if not found
@@ -72,13 +126,12 @@ func load_todos_from_file(file_path: String = "res://todos.json"):
 	print("Loaded %d quest(s) from file: %s" % [all_todos.size(), file_path])
 	todos_loaded.emit()
 
-func import_quests_from_json(json_string: String, quest_type: String) -> bool:
-	"""Import quests from JSON string and tag them with quest_type (daily or one_time)
+func import_quests_from_json(json_string: String, fallback_quest_type: String = "one_time") -> bool:
+	"""Import quests from JSON string
 	Merges with existing quests, preserving progress for matching quest IDs
 
-	Handles TWO formats:
-	1. Python team format: Single quest object {...}
-	2. Our format: {"quests": [...]}
+	NEW: LLM now provides 'frequency' field (one_time/daily/weekly) per quest
+	Fallback quest_type only used if frequency is missing
 	"""
 
 	var json = JSON.new()
@@ -91,15 +144,11 @@ func import_quests_from_json(json_string: String, quest_type: String) -> bool:
 	var data = json.data
 	var imported_quests = []
 
-	# Handle both formats
+	# Expect: {"quests": [...]}
 	if data.has("quests"):
-		# Our format: {"quests": [...]}
 		imported_quests = data.get("quests", [])
-	elif data.has("id") and data.has("tasks"):
-		# Python team format: Single quest object
-		imported_quests = [data]
 	else:
-		print("Invalid import JSON - expected single quest or {quests: [...]}")
+		print("Invalid import JSON - expected {quests: [...]}")
 		return false
 
 	for quest in imported_quests:
@@ -107,7 +156,12 @@ func import_quests_from_json(json_string: String, quest_type: String) -> bool:
 		if quest_id.is_empty():
 			continue
 
-		# Map difficulty -> priority for placement (Python team doesn't have priority field)
+		# Get quest type from LLM's 'frequency' field (new!)
+		var quest_type = quest.get("frequency", fallback_quest_type)
+		if quest_type not in ["one_time", "daily", "weekly"]:
+			quest_type = fallback_quest_type  # Fallback to safe value
+
+		# Map difficulty -> priority for placement
 		if not quest.has("priority"):
 			var difficulty = quest.get("difficulty", "medium")
 			match difficulty:
@@ -120,20 +174,33 @@ func import_quests_from_json(json_string: String, quest_type: String) -> bool:
 				_:
 					quest["priority"] = "medium"
 
-		# Add estimated_time_minutes if missing (default based on difficulty)
+		# Add default rewards if missing (from config)
+		if not quest.has("rewards") or quest.get("rewards", {}).is_empty():
+			var difficulty = quest.get("difficulty", "medium")
+			var defaults = game_config.get("progression", {}).get("difficulty_rewards", {}).get(difficulty, {})
+			if not defaults.is_empty():
+				quest["rewards"] = {
+					"xp": defaults.get("xp", 100),
+					"coins": defaults.get("coins", 50)
+				}
+			else:
+				# Fallback if config not loaded
+				quest["rewards"] = {"xp": 100, "coins": 50}
+
+		# Add estimated_time_minutes if missing (from config)
 		if not quest.has("estimated_time_minutes"):
 			var difficulty = quest.get("difficulty", "medium")
-			match difficulty:
-				"easy":
-					quest["estimated_time_minutes"] = 15
-				"medium":
-					quest["estimated_time_minutes"] = 30
-				"hard":
-					quest["estimated_time_minutes"] = 60
-				"epic":
-					quest["estimated_time_minutes"] = 120
-				_:
-					quest["estimated_time_minutes"] = 30
+			var defaults = game_config.get("progression", {}).get("difficulty_rewards", {}).get(difficulty, {})
+			if defaults.has("estimated_time_minutes"):
+				quest["estimated_time_minutes"] = defaults.get("estimated_time_minutes")
+			else:
+				# Fallback
+				match difficulty:
+					"easy": quest["estimated_time_minutes"] = 15
+					"medium": quest["estimated_time_minutes"] = 30
+					"hard": quest["estimated_time_minutes"] = 60
+					"epic": quest["estimated_time_minutes"] = 120
+					_: quest["estimated_time_minutes"] = 30
 
 		# Check if quest already exists
 		var existing_quest = null
@@ -157,7 +224,7 @@ func import_quests_from_json(json_string: String, quest_type: String) -> bool:
 			quest_types[quest_id] = quest_type
 			print("Imported new quest: ", quest_id, " as ", quest_type)
 
-	print("Imported %d quests as %s" % [imported_quests.size(), quest_type])
+	print("Imported %d quests" % imported_quests.size())
 	todos_loaded.emit()
 	return true
 
@@ -299,8 +366,9 @@ func complete_quest(quest_id: String) -> bool:
 	player_xp += xp
 	player_gold += coins
 
-	# Check for level up (simple: every 500 XP)
-	var new_level = 1 + int(player_xp / 500)
+	# Check for level up (configurable XP per level)
+	var xp_per_level = game_config.get("progression", {}).get("xp_per_level", 500)
+	var new_level = 1 + int(player_xp / xp_per_level)
 	if new_level > player_level:
 		player_level = new_level
 		print("LEVEL UP! Now level ", player_level)
@@ -317,6 +385,14 @@ func complete_quest(quest_id: String) -> bool:
 func get_quest_type(quest_id: String) -> String:
 	"""Get quest type (daily or one_time)"""
 	return quest_types.get(quest_id, "one_time")
+
+func get_xp_per_level() -> int:
+	"""Get XP required per level from config"""
+	return game_config.get("progression", {}).get("xp_per_level", 500)
+
+func get_shop_items() -> Array:
+	"""Get shop items from config"""
+	return game_config.get("shop", {}).get("items", [])
 
 func get_player_stats() -> Dictionary:
 	return {

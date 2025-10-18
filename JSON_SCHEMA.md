@@ -10,35 +10,37 @@ We'll watch for this file and reload it when it changes.
 
 ## Your Output Format (Python Script)
 
-**Output to stdout** - a single quest object:
+**Output to stdout** - quests array:
 
 ```json
 {
-  "id": "Q-abc123def",
-  "title": "Short quest title (3-7 words)",
-  "description": "Overall quest description",
-  "difficulty": "easy",
-  "rewards": {
-    "xp": 200,
-    "coins": 100
-  },
-  "tasks": [
+  "quests": [
     {
-      "id": "T-xyz789",
-      "text": "Specific task description"
-    },
-    {
-      "id": "T-abc456",
-      "text": "Another specific task"
+      "id": "Q-abc123def",
+      "title": "Short quest title (3-7 words)",
+      "description": "Overall quest description",
+      "frequency": "one_time",
+      "difficulty": "easy",
+      "tasks": [
+        {
+          "id": "T-xyz789",
+          "text": "Specific task description"
+        },
+        {
+          "id": "T-abc456",
+          "text": "Another specific task"
+        }
+      ]
     }
   ]
 }
 ```
 
 **Note:** Game's import layer will automatically:
+- Read `frequency` to determine quest type (one_time/daily/weekly)
 - Map `difficulty` to NPC placement distance ("easy" = far, "hard"/"epic" = close)
+- Generate `rewards` from difficulty using game_config.json (no need to include!)
 - Add defaults for any missing fields
-- Wrap your single quest into internal format
 
 ## Field Descriptions
 

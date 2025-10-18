@@ -1,0 +1,54 @@
+{
+  "progression": {
+    "xp_per_level": 500,
+    "difficulty_rewards": {
+      "easy": {
+        "xp": 100,
+        "coins": 50
+      },
+      "medium": {
+        "xp": 200,
+        "coins": 100
+      },
+      "hard": {
+        "xp": 400,
+        "coins": 200
+      },
+      "epic": {
+        "xp": 800,
+        "coins": 400
+      }
+    }
+  },
+  "shop": {
+    "items": [
+      {
+        "name": "Red Hat",
+        "price": 50,
+        "cosmetic": "Hat",
+        "description": "A stylish red cone hat"
+      },
+      {
+        "name": "Wizard Hat",
+        "price": 100,
+        "cosmetic": "WizardHat",
+        "description": "Pointy purple wizard hat"
+      },
+      {
+        "name": "Red Cape",
+        "price": 150,
+        "cosmetic": "Cape",
+        "description": "A flowing red cape"
+      }
+    ]
+  },
+  "npc_spawning": {
+    "max_npcs": 15,
+    "min_npc_distance": 3.0,
+    "priority_ranges": {
+      "high": {"min": 5.0, "max": 10.0},
+      "medium": {"min": 10.0, "max": 16.0},
+      "low": {"min": 16.0, "max": 22.0}
+    }
+  }
+}

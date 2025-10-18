@@ -4,13 +4,14 @@ extends CharacterBody3D
 const SPEED = 7.0  # Base speed (increased from 5.0)
 const SPRINT_MULTIPLIER = 3.0  # Sprint speed multiplier (hold Shift)
 const FIXED_Y_POSITION = 1.0
+const ROTATION_SPEED = 10.0  # How fast player rotates to face movement direction
 
 func _ready():
 	print("Player initialized")
 	# Set initial Y position
 	position.y = FIXED_Y_POSITION
 
-func _physics_process(_delta):
+func _physics_process(delta):
 	# Get input direction (screen space for 2.5D)
 	var input_dir = Input.get_vector("move_left", "move_right", "move_forward", "move_backward")
 
@@ -25,6 +26,10 @@ func _physics_process(_delta):
 	if direction:
 		velocity.x = direction.x * current_speed
 		velocity.z = direction.z * current_speed
+
+		# Rotate to face movement direction
+		var target_rotation = atan2(direction.x, direction.z)
+		rotation.y = lerp_angle(rotation.y, target_rotation, ROTATION_SPEED * delta)
 	else:
 		velocity.x = move_toward(velocity.x, 0, current_speed)
 		velocity.z = move_toward(velocity.z, 0, current_speed)
