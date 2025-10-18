@@ -1,0 +1,44 @@
+# Godot 4+ specific ignores
+.godot/
+
+# Godot-specific ignores (keep export_presets.cfg)
+*.import
+*.translation
+
+# Mono-specific ignores
+.mono/
+data_*/
+mono_crash.*.json
+
+# System/tool-specific ignores
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Build artifacts that should NOT be committed
+# (Comment these out since you want to commit exe/pck files)
+# builds/**/*.exe
+# builds/**/*.pck
+
+# External files created at runtime (shouldn't be in repo)
+builds/**/game_config.json
+builds/**/api/
+builds/**/user_input_*.txt
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE specific
+.vscode/
+.idea/
+*.sublime-*
+
+# Logs
+*.log
+
+# Temporary files
+nul

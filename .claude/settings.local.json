@@ -4,7 +4,8 @@
       "mcp__godot__run_project",
       "mcp__godot__get_debug_output",
       "mcp__godot__stop_project",
-      "Bash(timeout /t 3)"
+      "Bash(timeout /t 3)",
+      "mcp__godot__launch_editor"
     ],
     "deny": [],
     "ask": []
