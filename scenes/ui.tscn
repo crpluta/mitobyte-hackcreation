@@ -403,6 +403,67 @@ size_flags_vertical = 3
 layout_mode = 2
 size_flags_horizontal = 3
 
+[node name="ShopDialog" type="Panel" parent="."]
+visible = false
+z_index = 100
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -350.0
+offset_top = -300.0
+offset_right = 350.0
+offset_bottom = 300.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Container" type="VBoxContainer" parent="ShopDialog"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 20.0
+offset_top = 20.0
+offset_right = -20.0
+offset_bottom = -20.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Title" type="Label" parent="ShopDialog/Container"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 32
+text = "Shop"
+horizontal_alignment = 1
+
+[node name="GoldDisplay" type="Label" parent="ShopDialog/Container"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+theme_override_colors/font_color = Color(1, 0.84, 0, 1)
+text = "Your Gold: 0"
+horizontal_alignment = 1
+
+[node name="Spacer1" type="Control" parent="ShopDialog/Container"]
+custom_minimum_size = Vector2(0, 10)
+layout_mode = 2
+
+[node name="ScrollContainer" type="ScrollContainer" parent="ShopDialog/Container"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="ItemsList" type="VBoxContainer" parent="ShopDialog/Container/ScrollContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Spacer2" type="Control" parent="ShopDialog/Container"]
+custom_minimum_size = Vector2(0, 10)
+layout_mode = 2
+
+[node name="CloseHint" type="Label" parent="ShopDialog/Container"]
+layout_mode = 2
+text = "Press ESC to close"
+horizontal_alignment = 1
+
 [node name="PlayerPortrait" type="Panel" parent="."]
 anchors_preset = 0
 offset_left = 10.0
@@ -455,10 +516,6 @@ theme_override_font_sizes/font_size = 18
 theme_override_colors/font_color = Color(1, 0.84, 0, 1)
 text = "0 Gold"
 horizontal_alignment = 1
-
-[node name="HatButton" type="Button" parent="PlayerPortrait/Container"]
-layout_mode = 2
-text = "Toggle Hat (Test)"
 
 [node name="XPBar" type="Panel" parent="."]
 anchors_preset = 7

@@ -31,10 +31,13 @@ extends CanvasLayer
 @onready var active_quests_hud = $ActiveQuestsHUD
 @onready var active_quests_list = $ActiveQuestsHUD/Container/ScrollContainer/QuestsList
 
+@onready var shop_dialog = $ShopDialog
+@onready var shop_gold_display = $ShopDialog/Container/GoldDisplay
+@onready var shop_items_list = $ShopDialog/Container/ScrollContainer/ItemsList
+
 @onready var portrait_camera = $PlayerPortrait/Container/PortraitFrame/SubViewport/PortraitCamera
 @onready var level_label = $PlayerPortrait/Container/LevelLabel
 @onready var gold_label = $PlayerPortrait/Container/GoldLabel
-@onready var hat_button = $PlayerPortrait/Container/HatButton
 @onready var xp_progress = $XPBar/ProgressBar
 @onready var xp_label = $XPBar/XPLabel
 
@@ -46,10 +49,10 @@ var current_quest_data: Dictionary = {}
 # Track which NPC opened the dialog (for quest_type)
 var current_input_quest_type: String = "one_time"  # default
 
-# Background process for LLM
-var llm_process_id: int = -1
-var llm_output_file: String = ""
+# LLM processing
 var llm_quest_type: String = ""
+var llm_thread: Thread = null
+var llm_result: Dictionary = {}
 
 # Player reference for portrait camera
 var player: Node3D = null
@@ -70,13 +73,13 @@ func _ready():
 		deckard.interaction_triggered.connect(func(): _on_npc_interaction("one_time"))
 		print("Connected to Deckard Cain signals")
 
-	# Connect to Grindmaster Grok signals (daily quests)
-	var grok = get_tree().get_first_node_in_group("grindmaster_grok")
-	if grok:
-		grok.player_entered_range.connect(func(): _on_npc_entered_range("Grindmaster Grok"))
-		grok.player_exited_range.connect(_on_npc_exited_range)
-		grok.interaction_triggered.connect(func(): _on_npc_interaction("daily"))
-		print("Connected to Grindmaster Grok signals")
+	# Connect to Shop Keeper signals
+	var shop = get_tree().get_first_node_in_group("shop_keeper")
+	if shop:
+		shop.player_entered_range.connect(func(): _on_npc_entered_range("Shop Keeper"))
+		shop.player_exited_range.connect(_on_npc_exited_range)
+		shop.interaction_triggered.connect(_on_shop_interaction)
+		print("Connected to Shop Keeper signals")
 
 	# Connect submit button
 	submit_button.pressed.connect(_on_submit_pressed)
@@ -85,9 +88,6 @@ func _ready():
 	# Connect notification dismiss buttons
 	toast_dismiss_button.pressed.connect(_on_toast_dismiss)
 	levelup_dismiss_button.pressed.connect(_on_levelup_dismiss)
-
-	# Connect hat button
-	hat_button.pressed.connect(_on_hat_button_pressed)
 
 	# Connect to TodoManager for active quests HUD
 	TodoManager.quest_accepted.connect(_update_active_quests_hud)
@@ -121,6 +121,7 @@ func hide_all():
 	loading_label.hide()
 	quest_dialog.hide()
 	quest_log.hide()
+	shop_dialog.hide()
 	toast_notification.hide()
 	levelup_panel.hide()
 
@@ -167,29 +168,25 @@ func _on_submit_pressed():
 		confirmation_label.show()
 		return
 
-	# Show loading
+	# Show loading message
 	confirmation_label.hide()
+	loading_label.text = "Generating quest... (this may take a moment)"
 	loading_label.show()
 	submit_button.disabled = true
-
-	# Clear input
 	text_input.text = ""
 
-	# UNPAUSE IMMEDIATELY so background process can run!
-	get_tree().paused = false
-
-	# Wait one frame for UI to update
+	# Wait a frame to show loading message before blocking
 	await get_tree().process_frame
 
-	# Save to file and call LLM in background (non-blocking!)
+	# Save to file and call LLM (this WILL freeze briefly!)
 	save_user_input(user_text)
 
-	# Auto-close after 1 second
-	await get_tree().create_timer(1.0, true, false, true).timeout
-	input_dialog.hide()
+	# Hide loading and close dialog
 	loading_label.hide()
+	input_dialog.hide()
 	interaction_prompt.show()
 	submit_button.disabled = false
+	get_tree().paused = false
 
 func save_user_input(text: String):
 	# Save to appropriate file based on quest type
@@ -207,64 +204,85 @@ func save_user_input(text: String):
 		print("Failed to save user input!")
 
 func call_llm_script(input_file: String, quest_type: String):
-	"""Call the LLM Python script non-blocking via background process"""
+	"""Call the LLM Python script in a thread (non-blocking)"""
+	llm_quest_type = quest_type
+
 	var abs_input_path = ProjectSettings.globalize_path(input_file)
 	var script_path = ProjectSettings.globalize_path("res://api/generate_quests.py")
 
-	# Create temp output file path
-	llm_output_file = ProjectSettings.globalize_path("res://temp_quest_output.json")
-	llm_quest_type = quest_type
+	# Prepare thread data
+	llm_result = {"success": false, "json": "", "error": ""}
+	llm_thread = Thread.new()
 
-	# Delete old output file if exists
-	if FileAccess.file_exists(llm_output_file):
-		DirAccess.remove_absolute(llm_output_file)
+	var thread_data = {
+		"script_path": script_path,
+		"input_path": abs_input_path
+	}
 
-	print("Starting Python script in background...")
-	print("Input: ", abs_input_path)
-	print("Output will be written to: ", llm_output_file)
+	print("Starting LLM thread...")
+	llm_thread.start(_run_llm_in_thread.bind(thread_data))
 
-	# Start process with output redirection to file
-	var args = [script_path, "--input", abs_input_path, "--output", llm_output_file]
-	llm_process_id = OS.create_process("python", args)
+	# Poll for completion
+	_check_llm_thread()
 
-	if llm_process_id == -1:
-		print("ERROR: Failed to start Python process!")
+func _run_llm_in_thread(data: Dictionary):
+	"""Thread function - runs Python script"""
+	print("Calling LLM script: ", data.script_path)
+	print("Input file: ", data.input_path)
+
+	var output = []
+	var exit_code = OS.execute("python", [data.script_path, "--input", data.input_path], output, true, true)  # Capture stderr too
+
+	if exit_code != 0:
+		print("ERROR: Python script failed with exit code: ", exit_code)
+		# Capture error message from output (stderr)
+		var error_msg = "Quest generation failed"
+		if not output.is_empty():
+			var error_output = output[0] if output.size() > 0 else ""
+			print("Python error: ", error_output)
+			# Extract useful error message
+			if "Needs clarification" in error_output or "clarify" in error_output:
+				error_msg = "Tasks unclear! Please be more specific."
+			elif "no tasks" in error_output.to_lower():
+				error_msg = "No valid tasks found. Please describe what you need to do!"
+		llm_result.error = error_msg
+		llm_result.success = false
 		return
 
-	print("Python process started with PID: ", llm_process_id)
+	if output.is_empty():
+		print("ERROR: No output from Python script")
+		llm_result.error = "No quest generated"
+		llm_result.success = false
+		return
 
-	# Start polling for completion
-	_poll_for_llm_completion()
+	var json_output = output[0]
+	print("Received JSON from LLM script (length: %d)" % json_output.length())
 
-func _poll_for_llm_completion():
-	"""Poll for output file creation (non-blocking)"""
-	# Check if output file exists
-	if FileAccess.file_exists(llm_output_file):
-		print("Quest generation complete! Loading results...")
+	llm_result.json = json_output
+	llm_result.success = true
 
-		# Read the output file
-		var file = FileAccess.open(llm_output_file, FileAccess.READ)
-		if file:
-			var json_output = file.get_as_text()
-			file.close()
+func _check_llm_thread():
+	"""Check if thread completed (non-blocking poll)"""
+	if llm_thread and llm_thread.is_alive():
+		# Still running, check again
+		await get_tree().create_timer(0.1, true, false, true).timeout
+		_check_llm_thread()
+	elif llm_thread:
+		# Thread finished
+		llm_thread.wait_to_finish()
+		llm_thread = null
 
-			print("Received JSON (length: %d)" % json_output.length())
-
-			# Import quests
-			var success = TodoManager.import_quests_from_json(json_output, llm_quest_type)
+		if llm_result.success:
+			# Import on main thread
+			var success = TodoManager.import_quests_from_json(llm_result.json, llm_quest_type)
 			if success:
-				print("Successfully imported %s quests!" % llm_quest_type)
+				print("Successfully imported quests!")
 			else:
 				print("Failed to import quests")
-
-			# Clean up
-			DirAccess.remove_absolute(llm_output_file)
-			llm_process_id = -1
-		return
-
-	# Still running, check again soon
-	await get_tree().create_timer(0.2, true, false, true).timeout
-	_poll_for_llm_completion()
+				_show_error_toast("Failed to parse quest. Please try simpler text!")
+		else:
+			print("LLM generation failed: ", llm_result.error)
+			_show_error_toast(llm_result.error)
 
 func _input(event):
 	if input_dialog.visible and event.is_action_pressed("ui_cancel"):
@@ -275,6 +293,10 @@ func _input(event):
 		quest_dialog.hide()
 		interaction_prompt.show()
 		get_tree().paused = false
+	elif shop_dialog.visible and event.is_action_pressed("ui_cancel"):
+		shop_dialog.hide()
+		interaction_prompt.show()
+		get_tree().paused = false
 	elif quest_log.visible and (event.is_action_pressed("ui_cancel") or event.is_action_pressed("quest_log")):
 		quest_log.hide()
 		get_tree().paused = false
@@ -282,7 +304,7 @@ func _input(event):
 		toggle_quest_log()
 
 func is_dialog_open() -> bool:
-	return input_dialog.visible or quest_dialog.visible or quest_log.visible
+	return input_dialog.visible or quest_dialog.visible or quest_log.visible or shop_dialog.visible
 
 func show_quest_dialog(npc: Node3D, todo: Dictionary, quest_id: String):
 	current_quest_npc = npc
@@ -524,6 +546,27 @@ func _on_levelup_dismiss():
 	tween.tween_property(levelup_panel, "modulate:a", 0.0, 0.2)
 	tween.tween_callback(levelup_panel.hide)
 
+func _show_error_toast(message: String):
+	"""Show error message in toast notification"""
+	toast_quest_title.text = "Error"
+	toast_rewards.text = message
+	toast_rewards.add_theme_color_override("font_color", Color(1, 0.3, 0.3))  # Red for errors
+
+	# Show with fade-in
+	toast_notification.modulate.a = 0.0
+	toast_notification.show()
+
+	var tween = create_tween()
+	tween.tween_property(toast_notification, "modulate:a", 1.0, 0.3)
+
+	# Auto-dismiss after 4 seconds (longer for errors)
+	await get_tree().create_timer(4.0, true, false, true).timeout
+	if toast_notification.visible:
+		_on_toast_dismiss()
+
+	# Reset color for next use
+	toast_rewards.add_theme_color_override("font_color", Color(1, 0.8, 0.2))
+
 func _update_active_quests_hud(_quest_id: String):
 	"""Update the active quests HUD with current accepted quests"""
 	# Clear existing content
@@ -547,17 +590,26 @@ func _update_active_quests_hud(_quest_id: String):
 		var quest_title = quest.get("title", "Unknown Quest")
 		var tasks = quest.get("tasks", [])
 
-		# Quest title
-		var title_label = Label.new()
-		title_label.text = "[b]%s[/b]" % quest_title
-		title_label.add_theme_font_size_override("font_size", 16)
-
-		# Color based on quest type
+		# Quest title with frequency indicator
 		var quest_type = TodoManager.get_quest_type(quest_id)
-		if quest_type == "daily":
-			title_label.add_theme_color_override("font_color", Color(0.4, 0.7, 1.0))
-		else:
-			title_label.add_theme_color_override("font_color", Color(0.3, 1.0, 0.3))
+		var frequency_badge = ""
+		var title_color = Color(1.0, 1.0, 1.0)
+
+		match quest_type:
+			"daily":
+				frequency_badge = "[D] "
+				title_color = Color(0.4, 0.7, 1.0)  # Blue
+			"weekly":
+				frequency_badge = "[W] "
+				title_color = Color(1.0, 0.8, 0.2)  # Gold
+			_:  # one_time
+				frequency_badge = ""
+				title_color = Color(0.3, 1.0, 0.3)  # Green
+
+		var title_label = Label.new()
+		title_label.text = "[b]%s%s[/b]" % [frequency_badge, quest_title]
+		title_label.add_theme_font_size_override("font_size", 16)
+		title_label.add_theme_color_override("font_color", title_color)
 
 		active_quests_list.add_child(title_label)
 
@@ -597,17 +649,111 @@ func _update_player_stats():
 	# Update gold
 	gold_label.text = "%d Gold" % stats.gold
 
-	# Update XP bar
-	var current_xp = stats.xp % 500  # XP within current level
-	var xp_for_next_level = 500
-	xp_progress.max_value = xp_for_next_level
+	# Update XP bar (use config value for XP per level)
+	var xp_per_level = TodoManager.get_xp_per_level()
+	var current_xp = stats.xp % xp_per_level  # XP within current level
+	xp_progress.max_value = xp_per_level
 	xp_progress.value = current_xp
-	xp_label.text = "%d / %d XP" % [current_xp, xp_for_next_level]
+	xp_label.text = "%d / %d XP" % [current_xp, xp_per_level]
 
-func _on_hat_button_pressed():
-	"""Toggle player hat visibility for testing cosmetics in portrait"""
+func _on_shop_interaction():
+	"""Open shop dialog"""
+	interaction_prompt.hide()
+	populate_shop()
+	shop_dialog.show()
+	get_tree().paused = true
+
+func populate_shop():
+	"""Populate shop with purchasable items"""
+	# Clear existing items
+	for child in shop_items_list.get_children():
+		child.queue_free()
+
+	# Update gold display
+	shop_gold_display.text = "Your Gold: %d" % TodoManager.player_gold
+
+	# Get shop items from config
+	var items = TodoManager.get_shop_items()
+
+	# Create item panels
+	for item in items:
+		var item_panel = PanelContainer.new()
+		var item_hbox = HBoxContainer.new()
+		item_panel.add_child(item_hbox)
+
+		# Item info (left side)
+		var info_vbox = VBoxContainer.new()
+		info_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		item_hbox.add_child(info_vbox)
+
+		# Item name
+		var name_label = Label.new()
+		name_label.text = "[b]%s[/b]" % item.name
+		name_label.add_theme_font_size_override("font_size", 18)
+		info_vbox.add_child(name_label)
+
+		# Description
+		var desc_label = Label.new()
+		desc_label.text = item.description
+		desc_label.add_theme_font_size_override("font_size", 14)
+		desc_label.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7))
+		info_vbox.add_child(desc_label)
+
+		# Price and button (right side)
+		var button_vbox = VBoxContainer.new()
+		item_hbox.add_child(button_vbox)
+
+		var price_label = Label.new()
+		price_label.text = "%d Gold" % item.price
+		price_label.add_theme_font_size_override("font_size", 16)
+		price_label.add_theme_color_override("font_color", Color(1, 0.84, 0))
+		price_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		button_vbox.add_child(price_label)
+
+		var buy_button = Button.new()
+		buy_button.text = "Buy"
+		buy_button.disabled = TodoManager.player_gold < item.price
+		buy_button.pressed.connect(func(): _purchase_item(item))
+		button_vbox.add_child(buy_button)
+
+		shop_items_list.add_child(item_panel)
+
+		# Spacer
+		var spacer = Control.new()
+		spacer.custom_minimum_size = Vector2(0, 10)
+		shop_items_list.add_child(spacer)
+
+func _purchase_item(item: Dictionary):
+	"""Purchase and equip a cosmetic item"""
+	var price = item.price
+	var cosmetic_name = item.cosmetic
+
+	# Check if player has enough gold
+	if TodoManager.player_gold < price:
+		print("Not enough gold!")
+		return
+
+	# Deduct gold
+	TodoManager.player_gold -= price
+	print("Purchased %s for %d gold" % [item.name, price])
+
+	# Equip cosmetic
 	if player:
-		var hat = player.get_node_or_null("Hat")
-		if hat:
-			hat.visible = not hat.visible
-			print("Hat toggled: ", "visible" if hat.visible else "hidden")
+		var cosmetic = player.get_node_or_null(cosmetic_name)
+		if cosmetic:
+			# Hide all other hats if buying a hat
+			if cosmetic_name in ["Hat", "WizardHat"]:
+				var hat1 = player.get_node_or_null("Hat")
+				var hat2 = player.get_node_or_null("WizardHat")
+				if hat1:
+					hat1.visible = false
+				if hat2:
+					hat2.visible = false
+
+			# Show purchased item
+			cosmetic.visible = true
+			print("Equipped: ", item.name)
+
+	# Update shop display
+	populate_shop()
+	_update_player_stats()

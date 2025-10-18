@@ -38,6 +38,11 @@ const COLOR_DAILY_AVAILABLE = Color(0.3, 0.6, 1.0)       # Light Blue
 const COLOR_DAILY_IN_PROGRESS = Color(0.6, 0.4, 1.0)     # Purple
 const COLOR_DAILY_COMPLETE = Color(0.4, 0.9, 1.0)        # Bright Blue
 
+# Colors for quest states - WEEKLY QUESTS (yellow family)
+const COLOR_WEEKLY_AVAILABLE = Color(1.0, 0.8, 0.2)      # Gold
+const COLOR_WEEKLY_IN_PROGRESS = Color(1.0, 0.6, 0.2)    # Orange
+const COLOR_WEEKLY_COMPLETE = Color(1.0, 1.0, 0.4)       # Bright Yellow
+
 func _ready():
 	player = get_tree().get_first_node_in_group("player")
 
@@ -108,14 +113,19 @@ func update_visual_state():
 	var color_in_progress: Color
 	var color_complete: Color
 
-	if quest_type == "daily":
-		color_available = COLOR_DAILY_AVAILABLE
-		color_in_progress = COLOR_DAILY_IN_PROGRESS
-		color_complete = COLOR_DAILY_COMPLETE
-	else:  # one_time
-		color_available = COLOR_ONETIME_AVAILABLE
-		color_in_progress = COLOR_ONETIME_IN_PROGRESS
-		color_complete = COLOR_ONETIME_COMPLETE
+	match quest_type:
+		"daily":
+			color_available = COLOR_DAILY_AVAILABLE
+			color_in_progress = COLOR_DAILY_IN_PROGRESS
+			color_complete = COLOR_DAILY_COMPLETE
+		"weekly":
+			color_available = COLOR_WEEKLY_AVAILABLE
+			color_in_progress = COLOR_WEEKLY_IN_PROGRESS
+			color_complete = COLOR_WEEKLY_COMPLETE
+		_:  # one_time (default)
+			color_available = COLOR_ONETIME_AVAILABLE
+			color_in_progress = COLOR_ONETIME_IN_PROGRESS
+			color_complete = COLOR_ONETIME_COMPLETE
 
 	# Update color and marker based on state
 	if is_turned_in:
