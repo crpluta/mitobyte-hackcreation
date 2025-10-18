@@ -873,7 +873,8 @@ def main(argv: Optional[List[str]] = None) -> int:
                 except Exception:
                     pass
 
-            output_root = quest
+            # Always wrap in an array payload shape
+            output_root = {"quests": [quest]}
         else:
             # Multi-quest path: call the model per group and assemble
             quests_out: List[Dict[str, Any]] = []
@@ -923,7 +924,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     # Always print JSON to stdout; never write files.
     if args.out:
         print("Note: --out is deprecated and ignored; printing to stdout", file=sys.stderr)
-    print(json.dumps(output_root if output_root is not None else {}, ensure_ascii=False, indent=2))
+    # Ensure we always return an array of quests, even if single
+    if output_root is None:
+        output_root = {"quests": []}
+    elif isinstance(output_root, dict) and "quests" not in output_root:
+        output_root = {"quests": [output_root]}
+    print(json.dumps(output_root, ensure_ascii=False, indent=2))
     return 0
 
 
