@@ -72,6 +72,8 @@ func _ready():
 		deckard.player_exited_range.connect(_on_npc_exited_range)
 		deckard.interaction_triggered.connect(func(): _on_npc_interaction("one_time"))
 		print("Connected to Loremaster signals")
+	else:
+		print("WARNING: Loremaster (deckard_cain) not found in scene!")
 
 	# Connect to Shop Keeper signals
 	var shop = get_tree().get_first_node_in_group("shop_keeper")

@@ -89,8 +89,14 @@ func spawn_quest_givers():
 		active_quest_ids[quest_id] = true
 
 		if quest_id in existing_npcs:
-			# NPC already exists - update its data and keep position/state
 			var npc = existing_npcs[quest_id]
+
+			# Don't reassign if NPC is returning to shack
+			if npc.current_state == npc.State.WALKING_TO_SHACK:
+				print("NPC is returning to shack, not reassigning: ", quest_id)
+				continue
+
+			# NPC already exists - update its data and keep position/state
 			npc.setup_quest(quest, quest_id)
 			npc.update_visual_state()
 			# Don't reset movement - let them stay where they are

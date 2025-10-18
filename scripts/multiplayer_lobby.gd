@@ -81,6 +81,25 @@ func _on_start_game_pressed():
 func _start_game():
 	get_tree().change_scene_to_file("res://scenes/main.tscn")
 
+# RPC: Client requests game state (client -> server)
+@rpc("any_peer", "reliable")
+func _request_game_state():
+	if not NetworkManager.is_server():
+		return
+
+	var sender_id = multiplayer.get_remote_sender_id()
+
+	# Check if game has already started by seeing if we're in the main scene
+	# If server is still in lobby, don't send them to game
+	# If server is in game, send the client to game
+	if get_tree().current_scene.name == "Main":
+		_send_to_game.rpc_id(sender_id)
+
+# RPC: Server tells client to join the game (server -> client)
+@rpc("authority", "reliable")
+func _send_to_game():
+	get_tree().change_scene_to_file("res://scenes/main.tscn")
+
 func _on_server_started():
 	status_label.text = "Server started!\nYour IP: Check network settings\nPort: " + port_input.text
 	_update_player_list()
@@ -88,6 +107,9 @@ func _on_server_started():
 func _on_connected_to_server():
 	status_label.text = "Connected to server!"
 	_update_player_list()
+
+	# Request game state from server
+	_request_game_state.rpc_id(1)
 
 func _on_connection_failed():
 	status_label.text = "Connection failed!"
