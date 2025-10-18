@@ -21,11 +21,9 @@ SCHEMA_GUIDE = {
     "title": "string",
     "description": "string",
     "difficulty": "easy|medium|hard|epic",
-    "category": "string",
     "rewards": {"xp": 0, "coins": 0},
-    "progress": {"total_tasks": 0, "completed_tasks": 0, "percent_complete": 0},
     "tasks": [
-        {"id": "T-001", "text": "string", "status": "todo|in_progress|done", "completed_at": None}
+        {"id": "T-001", "text": "string"}
     ]
 }
 
@@ -58,7 +56,7 @@ def _parse_tasks(content: str) -> List[str]:
     return tasks
 
 
-def _build_messages(tasks: List[str], difficulty_hint: Optional[str], category_hint: Optional[str]) -> List[Dict[str, str]]:
+def _build_messages(tasks: List[str], difficulty_hint: Optional[str]) -> List[Dict[str, str]]:
     schema_json = json.dumps(SCHEMA_GUIDE, ensure_ascii=False)
     user_lines = [
         "Create a SINGLE quest object in JSON matching this guide exactly (keys and shape), but with real values:",
@@ -71,8 +69,6 @@ def _build_messages(tasks: List[str], difficulty_hint: Optional[str], category_h
     ]
     if difficulty_hint:
         user_lines.append(f"- Overall difficulty hint: {difficulty_hint}")
-    if category_hint:
-        user_lines.append(f"- Overall category hint: {category_hint}")
     user_lines.append("Tasks:")
     for i, t in enumerate(tasks, 1):
         user_lines.append(f"{i}. {t}")
@@ -111,6 +107,8 @@ def call_ollama(messages: List[Dict[str, str]], model: str, host: str, temperatu
         "model": model,
         "messages": messages,
         "stream": False,
+        # Constrain output to JSON for faster, cleaner parsing
+        "format": "json",
         "options": {
             "temperature": temperature,
             "num_predict": max_tokens,
@@ -151,7 +149,6 @@ def _coerce_to_single_quest(obj: Any) -> Dict[str, Any]:
         "title": "Generated Quest",
         "description": "",
         "difficulty": "medium",
-        "category": "general",
         "rewards": {"xp": 0, "coins": 0},
         "tasks": [],
     }
@@ -170,7 +167,6 @@ def _normalize_quest(q: Dict[str, Any]) -> None:
     q["id"] = qid
     q.setdefault("description", "")
     q.setdefault("difficulty", "medium")
-    q.setdefault("category", "general")
     q.setdefault("rewards", {})
     q.setdefault("tasks", [])
     for t in q["tasks"]:
@@ -179,40 +175,16 @@ def _normalize_quest(q: Dict[str, Any]) -> None:
         text = t.get("text") or "Untitled Task"
         tid = _stable_id(text, "T", salt=qid)
         t["id"] = tid
-        t.setdefault("status", "todo")
-        t.setdefault("completed_at", None)
 
 
-def _apply_done_updates_one(q: Dict[str, Any], done_ids: List[str], done_texts: List[str]) -> Tuple[int, int]:
-    done_ids_set = {d.strip() for d in done_ids or [] if d and d.strip()}
-    done_texts_norm = {_norm_text(t) for t in (done_texts or []) if t and t.strip()}
-    id_updates = 0
-    text_updates = 0
-    now = _dt.datetime.now(_dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-    for t in q.get("tasks", []) or []:
-        tid = t.get("id")
-        ttext = _norm_text(t.get("text"))
-        if tid in done_ids_set or (ttext and ttext in done_texts_norm):
-            if t.get("status") != "done":
-                t["status"] = "done"
-                t["completed_at"] = t.get("completed_at") or now
-                if tid in done_ids_set:
-                    id_updates += 1
-                if ttext in done_texts_norm:
-                    text_updates += 1
-    return id_updates, text_updates
+# Done-state updates removed: no status/completed tracking
 
 
-def _recompute_progress_one(q: Dict[str, Any]) -> None:
-    tasks = q.get("tasks") or []
-    total = len(tasks)
-    done = sum(1 for t in tasks if (t.get("status") == "done"))
-    pct = int(round((done / total) * 100)) if total else 0
-    q["progress"] = {"total_tasks": total, "completed_tasks": done, "percent_complete": pct}
+# Progress computation removed: we no longer include progress in the output
 
 
 def _prune_fields_one(q: Dict[str, Any]) -> None:
-    for k in ["due_date", "prerequisites", "metadata"]:
+    for k in ["due_date", "prerequisites", "metadata", "category"]:
         if k in q:
             q.pop(k, None)
     if isinstance(q.get("rewards"), dict):
@@ -224,6 +196,11 @@ def _prune_fields_one(q: Dict[str, Any]) -> None:
             t.pop("dependencies", None)
         if "metadata" in t:
             t.pop("metadata", None)
+        # Remove status/completion fields
+        if "status" in t:
+            t.pop("status", None)
+        if "completed_at" in t:
+            t.pop("completed_at", None)
 def _normalize_and_assign_ids(obj: Dict[str, Any]) -> None:
     quests = obj.get("quests") or []
     for q in quests:
@@ -233,7 +210,6 @@ def _normalize_and_assign_ids(obj: Dict[str, Any]) -> None:
         # Ensure fields exist
         q.setdefault("description", "")
         q.setdefault("difficulty", "medium")
-        q.setdefault("category", "general")
         q.setdefault("rewards", {})
         q.setdefault("tasks", [])
         # Normalize tasks
@@ -244,8 +220,6 @@ def _normalize_and_assign_ids(obj: Dict[str, Any]) -> None:
             text = t.get("text") or "Untitled Task"
             tid = _stable_id(text, "T", salt=qid)
             t["id"] = tid
-            t.setdefault("status", "todo")
-            t.setdefault("completed_at", None)
 
 
 def _merge_root(existing: Dict[str, Any], new: Dict[str, Any]) -> Dict[str, Any]:
@@ -263,7 +237,7 @@ def _merge_root(existing: Dict[str, Any], new: Dict[str, Any]) -> Dict[str, Any]
         if qid in existing_map:
             eq = existing_map[qid]
             # Merge top-level fields conservatively
-            for k in ("title", "description", "difficulty", "category"):
+            for k in ("title", "description", "difficulty"):
                 if not eq.get(k) and nq.get(k):
                     eq[k] = nq[k]
             # Merge rewards (fill missing keys only)
@@ -280,27 +254,18 @@ def _merge_root(existing: Dict[str, Any], new: Dict[str, Any]) -> Dict[str, Any]
                     continue
                 if tid in task_map:
                     et = task_map[tid]
-                    # Preserve status and completed_at; fill other empty fields
-                    preserved_status = et.get("status")
-                    preserved_completed = et.get("completed_at")
+                    # Fill other empty fields
                     for tk in ("text",):
                         if not et.get(tk) and nt.get(tk):
                             et[tk] = nt[tk]
-                    if preserved_status:
-                        et["status"] = preserved_status
-                    if preserved_completed is not None:
-                        et["completed_at"] = preserved_completed
                 else:
-                    # New task; default status todo
-                    nt.setdefault("status", "todo")
-                    nt.setdefault("completed_at", None)
+                    # New task
                     eq["tasks"].append(nt)
         else:
             # New quest; ensure defaults
             nq.setdefault("tasks", [])
             for nt in nq["tasks"]:
-                nt.setdefault("status", "todo")
-                nt.setdefault("completed_at", None)
+                pass
             existing_map[qid] = nq
     # Rebuild list
     out["quests"] = list(existing_map.values())
@@ -316,7 +281,7 @@ def _prune_fields(root: Dict[str, Any]) -> None:
     # Remove fields we no longer support
     for q in root.get("quests", []) or []:
         # Drop deprecated quest-level fields
-        for k in ["due_date", "prerequisites"]:
+        for k in ["due_date", "prerequisites", "category"]:
             if k in q:
                 q.pop(k, None)
         # Rewards: keep only xp, coins
@@ -328,36 +293,16 @@ def _prune_fields(root: Dict[str, Any]) -> None:
                 t.pop("estimated_effort", None)
             if "dependencies" in t:
                 t.pop("dependencies", None)
+            if "status" in t:
+                t.pop("status", None)
+            if "completed_at" in t:
+                t.pop("completed_at", None)
 
 
-def _apply_done_updates(root: Dict[str, Any], done_ids: List[str], done_texts: List[str]) -> Tuple[int, int]:
-    done_ids_set = {d.strip() for d in done_ids or [] if d and d.strip()}
-    done_texts_norm = {_norm_text(t) for t in (done_texts or []) if t and t.strip()}
-    id_updates = 0
-    text_updates = 0
-    now = _dt.datetime.now(_dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-    for q in root.get("quests", []) or []:
-        for t in q.get("tasks", []) or []:
-            tid = t.get("id")
-            ttext = _norm_text(t.get("text"))
-            if tid in done_ids_set or (ttext and ttext in done_texts_norm):
-                if t.get("status") != "done":
-                    t["status"] = "done"
-                    t["completed_at"] = t.get("completed_at") or now
-                    if tid in done_ids_set:
-                        id_updates += 1
-                    if ttext in done_texts_norm:
-                        text_updates += 1
-    return id_updates, text_updates
+    # Done-state updates removed for multi-quest structures as well
 
 
-def _recompute_progress(root: Dict[str, Any]) -> None:
-    for q in root.get("quests", []) or []:
-        tasks = q.get("tasks") or []
-        total = len(tasks)
-        done = sum(1 for t in tasks if (t.get("status") == "done"))
-        pct = int(round((done / total) * 100)) if total else 0
-        q["progress"] = {"total_tasks": total, "completed_tasks": done, "percent_complete": pct}
+# Progress aggregation removed for multi-quest structures as well
 
 
 def _extract_json(text: str) -> str:
@@ -419,17 +364,25 @@ def main(argv: Optional[List[str]] = None) -> int:
     src.add_argument("--task", action="append", help="Add a single task; repeat this flag for multiple tasks")
 
     p.add_argument("--backend", choices=["ollama"], default="ollama", help="LLM backend to use")
-    p.add_argument("--model", "-m", default="llama3", help="Ollama model name, e.g. 'llama3', 'mistral', 'qwen2' ")
+    p.add_argument(
+        "--model", "-m", default="llama3.2:1b",
+        help=(
+            "Ollama model name (default: 'phi3:mini'). Examples: 'llama3', 'mistral', 'qwen2'. "
+            "For speed, try tiny models like 'phi3:mini', 'llama3.2:1b-instruct', 'qwen2.5:1.5b-instruct'."
+        ),
+    )
     p.add_argument("--host", default="http://localhost:11434", help="Ollama host URL")
     p.add_argument("--temperature", type=float, default=0.2, help="Sampling temperature")
     p.add_argument("--max-tokens", type=int, default=2048, help="Max tokens to generate")
+    p.add_argument(
+        "--fast",
+        action="store_true",
+        help="Favor speed: keep model but cap output length for faster responses",
+    )
     p.add_argument("--difficulty", help="Optional overall difficulty hint (e.g., easy, medium, hard)")
-    p.add_argument("--category", help="Optional overall category hint (e.g., onboarding, devops)")
     # File output is deprecated; script always prints JSON to stdout.
     p.add_argument("--out", "-o", required=False, help="(Deprecated) Ignored. Script prints JSON to stdout.")
     p.add_argument("--show-prompt", action="store_true", help="Print the constructed prompt and exit (dry run)")
-    p.add_argument("--done-id", action="append", help="Mark a task as done by its ID; repeatable")
-    p.add_argument("--done-text", action="append", help="Mark task(s) as done by exact text; repeatable")
 
     args = p.parse_args(argv)
 
@@ -442,11 +395,11 @@ def main(argv: Optional[List[str]] = None) -> int:
     else:
         tasks = []
 
-    if not tasks and not (args.done_id or args.done_text or args.show_prompt):
+    if not tasks and not args.show_prompt:
         print("No tasks provided.", file=sys.stderr)
         return 2
 
-    messages = _build_messages(tasks, args.difficulty, args.category)
+    messages = _build_messages(tasks, args.difficulty)
 
     if args.show_prompt and tasks:
         # Print as a readable block
@@ -460,7 +413,17 @@ def main(argv: Optional[List[str]] = None) -> int:
     new_obj: Dict[str, Any] = {}
     if tasks:
         if args.backend == "ollama":
-            raw = call_ollama(messages, model=args.model, host=args.host, temperature=args.temperature, max_tokens=args.max_tokens)
+            selected_model = args.model
+            selected_max_tokens = args.max_tokens
+            if args.fast and selected_max_tokens == 2048:
+                selected_max_tokens = 512
+            raw = call_ollama(
+                messages,
+                model=selected_model,
+                host=args.host,
+                temperature=args.temperature,
+                max_tokens=selected_max_tokens,
+            )
         else:
             raise RuntimeError(f"Unsupported backend: {args.backend}")
 
@@ -478,8 +441,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     # Coerce to a single quest and normalize
     quest = _coerce_to_single_quest(new_obj)
     _normalize_quest(quest)
-    _apply_done_updates_one(quest, args.done_id or [], args.done_text or [])
-    _recompute_progress_one(quest)
+    # No status/completed tracking
+    # No progress field generation
     _prune_fields_one(quest)
 
     # Always print JSON to stdout; never write files.
