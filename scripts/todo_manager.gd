@@ -28,6 +28,9 @@ var player_level: int = 1
 func _ready():
 	print("TodoManager initialized")
 
+	# Initialize external files for deployment
+	DeploymentManager.initialize_external_files()
+
 	# Load game configuration first
 	load_game_config()
 
@@ -39,13 +42,20 @@ func _ready():
 
 func load_game_config():
 	"""Load game configuration from game_config.json"""
-	var config_path = "res://game_config.json"
+	# Use external config path for deployed builds
+	var config_path = DeploymentManager.get_config_path()
+
+	# Fallback to res:// if external doesn't exist (shouldn't happen after init)
+	if not FileAccess.file_exists(config_path):
+		print("WARNING: External config not found at: ", config_path)
+		config_path = "res://game_config.json"
 
 	if not FileAccess.file_exists(config_path):
 		print("WARNING: game_config.json not found, using defaults")
 		_set_default_config()
 		return
 
+	print("Loading game config from: ", config_path)
 	var file = FileAccess.open(config_path, FileAccess.READ)
 	if not file:
 		print("ERROR: Failed to open game_config.json")

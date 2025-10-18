@@ -208,7 +208,8 @@ func call_llm_script(input_file: String, quest_type: String):
 	llm_quest_type = quest_type
 
 	var abs_input_path = ProjectSettings.globalize_path(input_file)
-	var script_path = ProjectSettings.globalize_path("res://api/generate_quests.py")
+	# Use external Python script path for deployment
+	var script_path = DeploymentManager.get_python_script_path()
 
 	# Prepare thread data
 	llm_result = {"success": false, "json": "", "error": ""}

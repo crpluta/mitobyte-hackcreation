@@ -13,6 +13,7 @@ config/icon="res://icon.svg"
 
 [autoload]
 
+DeploymentManager="*res://scripts/deployment_manager.gd"
 TodoManager="*res://scripts/todo_manager.gd"
 
 [display]
