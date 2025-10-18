@@ -12,7 +12,7 @@ from urllib import request, error
 SYSTEM_INSTRUCTIONS = (
     "You are a helpful assistant that converts a plain list of tasks into a single game-like Quest JSON object. "
     "Output STRICT JSON only with no markdown or commentary. Use concise, clear titles and descriptions. "
-    "Always include reasonable rewards. "
+    ""
     "If the user input is not clear ask for clarity and wait to generate tasks until clear input. "
     "Make a user input need to be at least 3 characters and alert the user if they need to update their input. "
     "Do not generate a quest if the user input text is less than 3 characters. "
@@ -23,7 +23,7 @@ SYSTEM_INSTRUCTIONS = (
     "Tasks must omit frequency words (e.g., 'every', 'each', weekday names, 'daily', 'weekly'); capture cadence via the quest 'frequency' field instead. "
     "Tasks must never use first person (no 'I', 'I'm', 'my'); use imperative verb-first phrasing (e.g., 'Finish Documentation'). "
     "Do NOT invent new tasks: only include tasks explicitly provided by the user (you may split compound items into multiple atomic tasks, but do not add actions beyond those items). "
-    "Title style: concise D&D-flavored tone (3-6 words), generic and non-specific (no proper nouns or setting lore). "
+    "Title style: evocative medieval D&D quest name (3-8 words), lore-like and atmospheric, but generic (no proper nouns or setting lore). "
     "Description style: NPC quest-giver directive written as a short story in a medieval setting (3-6 sentences). Provide brief background and establish context, address the player as 'you', and keep within the scope of the tasks without adding new requirements."
 )
 
@@ -116,7 +116,6 @@ SCHEMA_GUIDE = {
     "description": "string",
     "frequency": "daily|weekly|one_time",
     "difficulty": "easy|medium|hard|epic",
-    "rewards": {"xp": 0, "coins": 0},
     "tasks": [
         {"id": "T-001", "text": "string"}
     ]
@@ -258,6 +257,16 @@ def _extract_keywords(tasks: List[str], max_k: int = 6) -> List[str]:
     return out
 
 
+def _synthesize_lore_title(keywords: List[str]) -> str:
+    ks = [k.capitalize() for k in keywords if k]
+    if not ks:
+        return "A Modest Charge"
+    if len(ks) >= 2:
+        return f"{ks[0]} and {ks[1]} Oath"
+    # Single keyword
+    return f"The {ks[0]} Charge"
+
+
 def _infer_frequency_from_text(text: str) -> str:
     s = (text or "").lower()
     # Daily hints
@@ -361,12 +370,12 @@ def _build_messages(tasks: List[str], difficulty_hint: Optional[str]) -> List[Di
         "Rules:",
         "- Output STRICT JSON only (no markdown).",
         "- Consolidate all tasks under this one quest.",
-        "- Provide reasonable 'difficulty' and 'rewards'.",
+        "- Provide a reasonable 'difficulty'.",
         "- Use concise titles and descriptions; avoid any time constraints in the title or description.",
         "- Keep each task's wording strictly within the provided scope; avoid speculative details.",
         "- Tasks must omit frequency words (e.g., 'every', 'each', weekday names, 'daily', 'weekly'); capture cadence via the quest 'frequency' field instead.",
         "- Tasks must never use first person (no 'I', 'I'm', 'my'); use imperative verb-first phrasing (e.g., 'Finish Documentation').",
-        "- Title style: concise D&D-flavored tone (3-6 words), generic and non-specific (no proper nouns). Use a medieval style for tone and setting.",
+        "- Title style: evocative medieval D&D quest name (3-8 words), lore-like and atmospheric, but generic (no proper nouns or setting lore).",
         "- Description style: NPC quest-giver directive as a short medieval story (3-6 sentences) addressing 'you'; give brief background and context without adding new requirements.",
         "- Break compound items into multiple atomic tasks: one action per task.",
         "- If an item contains 'and', 'then', '&' or multiple verbs, split it into separate tasks.",
@@ -443,7 +452,7 @@ def _restyle_title_and_description(
 
     sys_txt = (
         "Rewrite only 'title' and 'description'. Output STRICT JSON with keys 'title' and 'description' only. "
-        "Title: concise D&D-flavored tone (3-6 words), generic and non-specific (no proper nouns or setting lore). "
+        "Title: evocative medieval D&D quest name (3-8 words), lore-like and atmospheric, but generic (no proper nouns or setting lore). "
         "Description: NPC quest-giver directive written as a short medieval story (3-6 sentences). Provide brief background and establish context, address the player as 'you', and do NOT add requirements beyond the tasks. "
         "Anchor both title and description to the tasks by naturally incorporating at least one provided keyword. Avoid generic outputs; be specific to these tasks. "
         "Example: {\"title\": \"Quill and Quiet Resolve\", \"description\": \"You arrive at a dim-lit scriptorium, where an old scribe beckons. 'You,' he rasps, 'must set your thoughts in order upon the page, then set your body to motion, lest the day grow dull and your spirit heavy.'\"}."
@@ -468,15 +477,11 @@ def _restyle_title_and_description(
         if isinstance(obj, dict):
             new_title = (obj.get("title") or title).strip()
             new_desc = (obj.get("description") or description).strip()
-            # Fallback: ensure title contains at least one keyword; if not, synthesize a simple anchored title
+            # Fallback: ensure title contains at least one keyword; if not, synthesize a lore-like anchored title
             if keywords:
                 low_title = new_title.lower()
                 if not any(k in low_title for k in keywords):
-                    if len(keywords) >= 2:
-                        fallback = f"{keywords[0].capitalize()} and {keywords[1].capitalize()}"
-                    else:
-                        fallback = f"The {keywords[0].capitalize()} Quest"
-                    new_title = fallback
+                    new_title = _synthesize_lore_title(keywords)
             if new_title:
                 quest["title"] = new_title
             if new_desc:
@@ -512,7 +517,6 @@ def _coerce_to_single_quest(obj: Any) -> Dict[str, Any]:
         "description": "",
         "frequency": "one_time",
         "difficulty": "medium",
-        "rewards": {"xp": 0, "coins": 0},
         "tasks": [],
     }
     if isinstance(obj, list):
@@ -531,7 +535,6 @@ def _normalize_quest(q: Dict[str, Any]) -> None:
     q.setdefault("description", "")
     q.setdefault("frequency", "one_time")
     q.setdefault("difficulty", "medium")
-    q.setdefault("rewards", {})
     q.setdefault("tasks", [])
     for t in q["tasks"]:
         if not t.get("text") and t.get("title"):
@@ -551,8 +554,8 @@ def _prune_fields_one(q: Dict[str, Any]) -> None:
     for k in ["due_date", "prerequisites", "metadata", "category", "clues"]:
         if k in q:
             q.pop(k, None)
-    if isinstance(q.get("rewards"), dict):
-        q["rewards"] = {k: v for k, v in q["rewards"].items() if k in ("xp", "coins")}
+    if "rewards" in q:
+        q.pop("rewards", None)
     for t in q.get("tasks", []) or []:
         if "estimated_effort" in t:
             t.pop("estimated_effort", None)
@@ -576,7 +579,6 @@ def _normalize_and_assign_ids(obj: Dict[str, Any]) -> None:
         # Ensure fields exist
         q.setdefault("description", "")
         q.setdefault("difficulty", "medium")
-        q.setdefault("rewards", {})
         q.setdefault("tasks", [])
         # Normalize tasks
         for t in q["tasks"]:
@@ -606,11 +608,7 @@ def _merge_root(existing: Dict[str, Any], new: Dict[str, Any]) -> Dict[str, Any]
             for k in ("title", "description", "difficulty"):
                 if not eq.get(k) and nq.get(k):
                     eq[k] = nq[k]
-            # Merge rewards (fill missing keys only)
-            eq.setdefault("rewards", {})
-            for rk, rv in (nq.get("rewards") or {}).items():
-                if rk not in eq["rewards"] or eq["rewards"][rk] in (None, 0, [], {}):
-                    eq["rewards"][rk] = rv
+            # Rewards removed from schema; ignore any incoming 'rewards'
             # Merge tasks by id
             eq.setdefault("tasks", [])
             task_map = {t.get("id"): t for t in eq["tasks"]}
@@ -650,9 +648,9 @@ def _prune_fields(root: Dict[str, Any]) -> None:
         for k in ["due_date", "prerequisites", "category", "clues"]:
             if k in q:
                 q.pop(k, None)
-        # Rewards: keep only xp, coins
-        if isinstance(q.get("rewards"), dict):
-            q["rewards"] = {k: v for k, v in q["rewards"].items() if k in ("xp", "coins")}
+        # Remove rewards entirely
+        if "rewards" in q:
+            q.pop("rewards", None)
         # Tasks cleanup
         for t in q.get("tasks", []) or []:
             if "estimated_effort" in t:
