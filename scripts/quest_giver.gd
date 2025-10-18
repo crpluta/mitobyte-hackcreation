@@ -22,6 +22,12 @@ var shack_position: Vector3 = Vector3.ZERO
 const WALK_SPEED = 3.0
 const ARRIVAL_THRESHOLD = 0.2
 
+# Marker bounce animation
+var bounce_time: float = 0.0
+const BOUNCE_SPEED: float = 3.0  # How fast it bounces
+const BOUNCE_HEIGHT: float = 0.5  # How high it bounces (increased)
+var base_marker_y: float = 3.5  # Base Y position for marker
+
 # Signals
 signal player_entered_range
 signal player_exited_range
@@ -48,8 +54,13 @@ func _ready():
 
 	# Create unique material instance for this NPC (not shared!)
 	var new_material = StandardMaterial3D.new()
+	new_material.albedo_color = Color(0.2, 0.8, 0.2, 1)  # Green base color
 	mesh.set_surface_override_material(0, new_material)
 	material = new_material
+
+	# Store initial marker position
+	if marker_label:
+		base_marker_y = marker_label.position.y
 
 	update_visual_state()
 
@@ -80,8 +91,11 @@ func _process(delta):
 			if global_position.distance_to(target_position) < ARRIVAL_THRESHOLD:
 				current_state = State.AT_LOCATION
 				print("NPC reached quest location: ", quest_id)
+				update_visual_state()  # Update visual when arriving
 
 		State.AT_LOCATION:
+			# Update bounce animation for marker
+			_update_marker_bounce(delta)
 			# Re-find player if we lost the reference (multiplayer)
 			if not is_instance_valid(player):
 				_find_local_player()
@@ -114,6 +128,22 @@ func _move_towards(target: Vector3, delta: float):
 	global_position += direction * WALK_SPEED * delta
 	global_position.y = 0.0  # Keep on ground
 
+func _update_marker_bounce(delta: float):
+	"""Update the bouncing animation for the marker"""
+	if not marker_label or not marker_label.visible:
+		return
+
+	var status = get_quest_status()
+
+	# Only bounce for available quests and ready-to-turn-in quests
+	if status == "available" or status == "complete":
+		bounce_time += delta * BOUNCE_SPEED
+		var bounce_offset = sin(bounce_time) * BOUNCE_HEIGHT
+		marker_label.position.y = base_marker_y + bounce_offset
+	else:
+		# No bounce for locked or in_progress quests
+		marker_label.position.y = base_marker_y
+
 func update_visual_state():
 	if quest_id.is_empty():
 		return
@@ -121,6 +151,7 @@ func update_visual_state():
 	# Check quest status in TodoManager
 	var is_accepted = quest_id in TodoManager.accepted_quests
 	var is_turned_in = quest_id in TodoManager.completed_quests
+	var is_locked_by_other = TodoManager.is_quest_locked_by_other(quest_id)
 	var all_tasks_done = TodoManager.are_all_tasks_completed(quest_id)
 
 	# Get quest type (daily or one_time)
@@ -145,35 +176,31 @@ func update_visual_state():
 			color_in_progress = COLOR_ONETIME_IN_PROGRESS
 			color_complete = COLOR_ONETIME_COMPLETE
 
-	# Check if locked by another player
-	var is_locked_by_other = TodoManager.is_quest_locked_by_other(quest_id)
+	# Hide marker while walking
+	if current_state == State.WALKING_TO_LOCATION or current_state == State.WALKING_TO_SHACK:
+		marker_label.visible = false
+		return
 
-	# Update color and marker based on state
+	# NPC stays green always - only update marker
+	# Update marker based on state
 	if is_turned_in:
-		# Quest already turned in - gray
-		material.albedo_color = Color(0.5, 0.5, 0.5)
-		marker_label.text = ""
-		marker_label.modulate = Color(0.5, 0.5, 0.5)
-	elif is_locked_by_other:
-		# Locked by another player - darker version of available color
-		material.albedo_color = color_available * 0.5  # Dimmed
-		marker_label.text = "X"
-		marker_label.modulate = Color(1.0, 0.5, 0.0)  # Orange
+		# Quest already turned in - no marker
+		marker_label.visible = false
 	elif is_accepted and all_tasks_done:
-		# All tasks complete, ready to turn in
-		material.albedo_color = color_complete
+		# All tasks complete, ready to turn in - yellow "?" (bouncing)
+		marker_label.visible = true
 		marker_label.text = "?"
-		marker_label.modulate = color_complete
-	elif is_accepted:
-		# In progress
-		material.albedo_color = color_in_progress
-		marker_label.text = "!"
-		marker_label.modulate = color_in_progress
+		marker_label.modulate = Color(1.0, 0.9, 0.0)  # Yellow
+	elif is_accepted or is_locked_by_other:
+		# Quest is being worked on (by anyone) - greyed out "?" (no bounce)
+		marker_label.visible = true
+		marker_label.text = "?"
+		marker_label.modulate = Color(0.5, 0.5, 0.5)  # Grey
 	else:
-		# Available
-		material.albedo_color = color_available
+		# Available - "!" (bouncing) - ALWAYS YELLOW
+		marker_label.visible = true
 		marker_label.text = "!"
-		marker_label.modulate = color_available
+		marker_label.modulate = Color(1.0, 0.9, 0.0)  # Yellow
 
 func get_quest_status() -> String:
 	if quest_id in TodoManager.completed_quests:
@@ -216,3 +243,4 @@ func start_return_to_shack():
 	print("NPC starting return journey to shack: ", quest_id)
 	current_state = State.WALKING_TO_SHACK
 	is_player_in_range = false  # Disable interaction during return
+	update_visual_state()  # Hide marker immediately
