@@ -5,6 +5,7 @@ import sys
 import re
 import hashlib
 import datetime as _dt
+import uuid
 from typing import List, Dict, Any, Optional, Tuple
 from urllib import request, error
 
@@ -111,13 +112,13 @@ KNOWN_TASK_WORDS = COMMON_TASK_WORDS | BASIC_ENGLISH_WORDS
 
 
 SCHEMA_GUIDE = {
-    "id": "Q-001",
+    "id": "00000000-0000-0000-0000-000000000000",
     "title": "string",
     "description": "string",
     "frequency": "daily|weekly|one_time",
     "difficulty": "easy|medium|hard|epic",
     "tasks": [
-        {"id": "T-001", "text": "string"}
+        {"id": "00000000-0000-0000-0000-000000000000", "text": "string"}
     ]
 }
 
@@ -491,9 +492,8 @@ def _restyle_title_and_description(
 
 
 def _stable_id(text: str, prefix: str, salt: str = "") -> str:
-    base = (salt + "\n" + (text or "")).strip().lower()
-    h = hashlib.sha1(base.encode("utf-8")).hexdigest()[:10]
-    return f"{prefix}-{h}"
+    # Generate a UUID4 string for all IDs to ensure global uniqueness
+    return str(uuid.uuid4())
 
 
 def _norm_text(x: Optional[str]) -> str:
