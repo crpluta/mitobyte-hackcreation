@@ -65,13 +65,13 @@ func _ready():
 
 	hide_all()
 
-	# Connect to Deckard Cain signals (one-time quests)
+	# Connect to Loremaster signals (one-time quests)
 	var deckard = get_tree().get_first_node_in_group("deckard_cain")
 	if deckard:
-		deckard.player_entered_range.connect(func(): _on_npc_entered_range("Deckard Cain"))
+		deckard.player_entered_range.connect(func(): _on_npc_entered_range("Loremaster"))
 		deckard.player_exited_range.connect(_on_npc_exited_range)
 		deckard.interaction_triggered.connect(func(): _on_npc_interaction("one_time"))
-		print("Connected to Deckard Cain signals")
+		print("Connected to Loremaster signals")
 
 	# Connect to Shop Keeper signals
 	var shop = get_tree().get_first_node_in_group("shop_keeper")

@@ -28,12 +28,15 @@ func _create_name_label():
 	"""Create a 3D label above the player's head"""
 	name_label = Label3D.new()
 	name_label.text = player_name
-	name_label.position = Vector3(0, 2.5, 0)  # Above player
+	name_label.position = Vector3(0, 3.2, 0)  # Higher above player to avoid cosmetics
 	name_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	name_label.pixel_size = 0.01
+	name_label.pixel_size = 0.015  # Increased from 0.01 for better visibility
+	name_label.font_size = 64  # Larger font
 	name_label.modulate = Color.WHITE
 	name_label.outline_modulate = Color.BLACK
-	name_label.outline_size = 8
+	name_label.outline_size = 12  # Thicker outline
+	name_label.render_priority = 100  # Much higher priority to render on top
+	name_label.no_depth_test = true  # Always render on top, ignore depth
 	add_child(name_label)
 
 func set_player_info(p_name: String, p_peer_id: int):

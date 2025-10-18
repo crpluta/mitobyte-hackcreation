@@ -2,7 +2,7 @@ extends Node3D
 
 # Interaction settings
 @export var interaction_range: float = 3.0
-@export var interaction_prompt: String = "Press E to talk to Deckard Cain"
+@export var interaction_prompt: String = "Press E to talk to Loremaster"
 
 # References
 var player: Node3D = null

@@ -20,6 +20,7 @@ surface_material_override/0 = SubResource("Material_cain")
 
 [node name="InteractionLabel" type="Label3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3, 0)
-text = "Deckard Cain"
-font_size = 32
-outline_size = 8
+pixel_size = 0.015
+text = "Loremaster"
+font_size = 64
+outline_size = 12

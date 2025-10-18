@@ -69,11 +69,11 @@ layout_mode = 2
 layout_mode = 2
 theme_override_font_sizes/normal_font_size = 16
 bbcode_enabled = true
-text = "[center]Talk to [b]Deckard Cain[/b] for one-time quests
-Talk to [b]Grindmaster Grok[/b] for daily quests
+text = "[center]Talk to [b]Loremaster[/b] to create quests
 
 Press [b]Q[/b] to open Quest Log
-Check off tasks as you complete them IRL[/center]"
+Check off tasks as you complete them IRL
+Complete quests to earn XP and Gold[/center]"
 fit_content = true
 
 [node name="Spacer3" type="Control" parent="VBoxContainer"]

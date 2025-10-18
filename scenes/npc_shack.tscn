@@ -15,9 +15,10 @@ surface_material_override/0 = SubResource("Material_shack")
 
 [node name="Label3D" type="Label3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.5, 0)
+pixel_size = 0.015
 text = "Spawn Shack"
-font_size = 32
-outline_size = 8
+font_size = 64
+outline_size = 12
 
 [node name="SpawnPoint" type="Marker3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 3)

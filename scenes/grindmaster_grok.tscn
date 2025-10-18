@@ -20,6 +20,7 @@ surface_material_override/0 = SubResource("Material_grok")
 
 [node name="InteractionLabel" type="Label3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3, 0)
+pixel_size = 0.015
 text = "Grindmaster Grok"
-font_size = 32
-outline_size = 8
+font_size = 64
+outline_size = 12
