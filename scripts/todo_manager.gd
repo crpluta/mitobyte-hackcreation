@@ -176,16 +176,30 @@ func import_quests_from_json(json_string: String, fallback_quest_type: String = 
 	Fallback quest_type only used if frequency is missing
 	"""
 
-	# In multiplayer, sync to all clients
+	# In multiplayer, sync to all clients via server
 	if multiplayer.has_multiplayer_peer():
-		# Broadcast to all clients (including self)
-		_sync_import_quests.rpc(json_string, fallback_quest_type)
+		if multiplayer.is_server():
+			# Server broadcasts to all clients (including self via call_local)
+			_sync_import_quests.rpc(json_string, fallback_quest_type)
+		else:
+			# Client requests server to broadcast
+			_request_import_quests.rpc_id(1, json_string, fallback_quest_type)
 		return true
 
 	# Solo mode - import directly
 	return _import_quests_internal(json_string, fallback_quest_type)
 
-@rpc("any_peer", "call_local", "reliable")
+# RPC: Client requests server to import and broadcast quests (client -> server)
+@rpc("any_peer", "reliable")
+func _request_import_quests(json_string: String, fallback_quest_type: String):
+	if not multiplayer.is_server():
+		return
+
+	# Server broadcasts to all clients
+	_sync_import_quests.rpc(json_string, fallback_quest_type)
+
+# RPC: Server broadcasts quest import to all clients (server -> all)
+@rpc("authority", "call_local", "reliable")
 func _sync_import_quests(json_string: String, fallback_quest_type: String):
 	"""RPC function to sync quest imports across all clients"""
 	_import_quests_internal(json_string, fallback_quest_type)
@@ -342,9 +356,16 @@ func accept_quest(quest_id: String) -> bool:
 		var my_peer_id = multiplayer.get_unique_id()
 		var my_name = NetworkManager.get_player_name(my_peer_id)
 
-		# Send request to server (works for both server and client)
-		_request_quest_accept.rpc_id(1, quest_id, my_peer_id, my_name)
-		return true  # Optimistic return, actual acceptance happens via RPC
+		if multiplayer.is_server():
+			# Server handles directly
+			if _can_accept_quest(quest_id, my_peer_id):
+				_sync_quest_accept.rpc(quest_id, my_peer_id, my_name)
+				return true
+			return false
+		else:
+			# Client sends request to server
+			_request_quest_accept.rpc_id(1, quest_id, my_peer_id, my_name)
+			return true  # Optimistic return, actual acceptance happens via RPC
 	else:
 		# Solo mode - accept directly
 		return _accept_quest_internal(quest_id, 1, "Player")
@@ -553,7 +574,13 @@ func complete_quest(quest_id: String) -> bool:
 	# In multiplayer, sync completion to all clients
 	if multiplayer.has_multiplayer_peer():
 		var my_peer_id = multiplayer.get_unique_id()
-		_request_quest_complete.rpc_id(1, quest_id, my_peer_id)
+
+		if multiplayer.is_server():
+			# Server broadcasts directly
+			_sync_quest_complete.rpc(quest_id, my_peer_id)
+		else:
+			# Client requests server to broadcast
+			_request_quest_complete.rpc_id(1, quest_id, my_peer_id)
 	else:
 		# Solo mode - complete directly
 		_complete_quest_internal(quest_id, 1)
