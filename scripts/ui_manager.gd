@@ -20,7 +20,6 @@ extends CanvasLayer
 @onready var toast_notification = $ToastNotification
 @onready var toast_quest_title = $ToastNotification/Container/QuestTitle
 @onready var toast_rewards = $ToastNotification/Container/Rewards
-@onready var toast_dismiss_button = $ToastNotification/Container/DismissButton
 
 @onready var levelup_panel = $LevelUpPanel
 @onready var levelup_level_info = $LevelUpPanel/Container/LevelInfo
@@ -86,7 +85,6 @@ func _ready():
 	quest_action_button.pressed.connect(_on_quest_action_pressed)
 
 	# Connect notification dismiss buttons
-	toast_dismiss_button.pressed.connect(_on_toast_dismiss)
 	levelup_dismiss_button.pressed.connect(_on_levelup_dismiss)
 
 	# Connect to TodoManager for active quests HUD
