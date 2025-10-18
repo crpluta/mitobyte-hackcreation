@@ -1,4 +1,4 @@
-[gd_scene load_steps=9 format=3 uid="uid://c7yq1d2x3h8kl"]
+[gd_scene load_steps=10 format=3 uid="uid://c7yq1d2x3h8kl"]
 
 [ext_resource type="PackedScene" uid="uid://bvjxw8qn4qnpm" path="res://scenes/player.tscn" id="1_player"]
 [ext_resource type="Script" path="res://scripts/camera_follow.gd" id="2_camera"]
@@ -6,6 +6,7 @@
 [ext_resource type="PackedScene" uid="uid://bwq5r8x9k3nvm" path="res://scenes/ui.tscn" id="4_ui"]
 [ext_resource type="Script" path="res://scripts/npc_spawner.gd" id="5_spawner"]
 [ext_resource type="PackedScene" uid="uid://c8rqk5n2vm3wh" path="res://scenes/quest_giver.tscn" id="6_quest_giver"]
+[ext_resource type="PackedScene" uid="uid://c3m4st3rgr0k" path="res://scenes/grindmaster_grok.tscn" id="7_grok"]
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_ground"]
 size = Vector2(50, 50)
@@ -42,6 +43,9 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
 
 [node name="DeckardCain" parent="NPCs" instance=ExtResource("3_deckard")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 0, 5)
+
+[node name="GrindmasterGrok" parent="NPCs" instance=ExtResource("7_grok")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5, 0, 5)
 
 [node name="QuestGiverSpawner" type="Node3D" parent="NPCs"]
 script = ExtResource("5_spawner")

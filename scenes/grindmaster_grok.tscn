@@ -1,0 +1,25 @@
+[gd_scene load_steps=4 format=3 uid="uid://c3m4st3rgr0k"]
+
+[ext_resource type="Script" path="res://scripts/grindmaster_grok.gd" id="1_grok"]
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_grok"]
+top_radius = 0.6
+bottom_radius = 0.6
+height = 2.5
+
+[sub_resource type="StandardMaterial3D" id="Material_grok"]
+albedo_color = Color(0.9, 0.6, 0.2, 1)
+
+[node name="GrindmasterGrok" type="Node3D" groups=["npc", "grindmaster_grok"]]
+script = ExtResource("1_grok")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.25, 0)
+mesh = SubResource("CylinderMesh_grok")
+surface_material_override/0 = SubResource("Material_grok")
+
+[node name="InteractionLabel" type="Label3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3, 0)
+text = "Grindmaster Grok"
+font_size = 32
+outline_size = 8

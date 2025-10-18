@@ -162,3 +162,54 @@ text = "Accept Quest"
 layout_mode = 2
 text = "Press ESC to close"
 horizontal_alignment = 1
+
+[node name="QuestLog" type="Panel" parent="."]
+visible = false
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 50.0
+offset_top = 50.0
+offset_right = -50.0
+offset_bottom = -50.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Container" type="VBoxContainer" parent="QuestLog"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 20.0
+offset_top = 20.0
+offset_right = -20.0
+offset_bottom = -20.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Title" type="Label" parent="QuestLog/Container"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 32
+text = "Quest Log"
+horizontal_alignment = 1
+
+[node name="Spacer1" type="Control" parent="QuestLog/Container"]
+custom_minimum_size = Vector2(0, 10)
+layout_mode = 2
+
+[node name="ScrollContainer" type="ScrollContainer" parent="QuestLog/Container"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="QuestList" type="VBoxContainer" parent="QuestLog/Container/ScrollContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Spacer2" type="Control" parent="QuestLog/Container"]
+custom_minimum_size = Vector2(0, 10)
+layout_mode = 2
+
+[node name="CloseHint" type="Label" parent="QuestLog/Container"]
+layout_mode = 2
+text = "Press Q or ESC to close"
+horizontal_alignment = 1

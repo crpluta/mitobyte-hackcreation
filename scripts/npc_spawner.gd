@@ -3,12 +3,20 @@ extends Node3D
 # NPC spawning
 @export var quest_giver_scene: PackedScene
 @export var spawn_center: Vector3 = Vector3.ZERO
+@export var max_npcs: int = 15  # Cap on number of quest-giver NPCs
 
 # Priority-based distance ranges
 const PRIORITY_RANGES = {
 	"high": {"min": 5.0, "max": 15.0},
 	"medium": {"min": 10.0, "max": 25.0},
 	"low": {"min": 15.0, "max": 35.0}
+}
+
+# Priority ordering for spawn cap
+const PRIORITY_ORDER = {
+	"high": 0,
+	"medium": 1,
+	"low": 2
 }
 
 var spawned_npcs: Array = []
@@ -20,6 +28,7 @@ func _ready():
 	# Connect to TodoManager signals
 	TodoManager.todos_loaded.connect(_on_todos_loaded)
 	TodoManager.quest_accepted.connect(_on_quest_updated)
+	TodoManager.task_completed.connect(_on_task_updated)
 	TodoManager.quest_completed.connect(_on_quest_updated)
 
 	# Spawn NPCs if todos already loaded
@@ -36,9 +45,21 @@ func spawn_quest_givers():
 			npc.queue_free()
 	spawned_npcs.clear()
 
-	# Spawn one NPC per todo
-	for todo in TodoManager.all_todos:
-		spawn_quest_giver(todo)
+	# Sort todos by priority (high -> medium -> low)
+	var sorted_todos = TodoManager.all_todos.duplicate()
+	sorted_todos.sort_custom(func(a, b):
+		var priority_a = PRIORITY_ORDER.get(a.get("priority", "medium"), 1)
+		var priority_b = PRIORITY_ORDER.get(b.get("priority", "medium"), 1)
+		return priority_a < priority_b  # Lower number = higher priority
+	)
+
+	# Spawn NPCs up to the cap
+	var spawn_count = min(sorted_todos.size(), max_npcs)
+	for i in range(spawn_count):
+		spawn_quest_giver(sorted_todos[i])
+
+	if sorted_todos.size() > max_npcs:
+		print("WARNING: %d quests available but only spawning %d NPCs (cap)" % [sorted_todos.size(), max_npcs])
 
 	print("Spawned %d quest-giver NPCs" % spawned_npcs.size())
 
@@ -98,6 +119,12 @@ func _on_npc_interaction(npc: Node3D, todo: Dictionary, quest_id: String):
 
 func _on_quest_updated(_quest_id: String):
 	# Update all NPC visual states
+	for npc in spawned_npcs:
+		if is_instance_valid(npc):
+			npc.update_visual_state()
+
+func _on_task_updated(_quest_id: String, _task_id: String):
+	# Update all NPC visual states when tasks are checked off
 	for npc in spawned_npcs:
 		if is_instance_valid(npc):
 			npc.update_visual_state()

@@ -1,82 +1,86 @@
 {
-  "version": "1.0",
-  "generated_at": "2025-10-18T09:30:00Z",
-  "todos": [
+  "quests": [
     {
-      "id": "todo_001",
-      "title": "Complete project documentation",
-      "description": "Write comprehensive documentation for the hackathon project including setup instructions and API references",
+      "id": "Q-doc001",
+      "title": "Complete Project Documentation",
+      "description": "Write comprehensive documentation for the hackathon project",
       "difficulty": "medium",
-      "estimated_time_minutes": 60,
-      "xp_reward": 100,
-      "gold_reward": 50,
       "priority": "high",
-      "subtasks": [
+      "estimated_time_minutes": 90,
+      "rewards": {
+        "xp": 150,
+        "coins": 75
+      },
+      "tasks": [
         {
-          "id": "subtask_001_1",
-          "description": "Write README.md",
-          "completed": false
+          "id": "T-readme",
+          "text": "Write README.md with setup instructions"
         },
         {
-          "id": "subtask_001_2",
-          "description": "Document API endpoints",
-          "completed": false
+          "id": "T-apiдокс",
+          "text": "Document API endpoints with examples"
+        },
+        {
+          "id": "T-comments",
+          "text": "Add inline code comments to main functions"
         }
-      ],
-      "tags": ["documentation", "hackathon"],
-      "auto_generated": false,
-      "completed": false
+      ]
     },
     {
-      "id": "todo_002",
-      "title": "Fix authentication bug",
-      "description": "Users are unable to log in when using special characters in passwords",
+      "id": "Q-bug001",
+      "title": "Fix Authentication Bug",
+      "description": "Users unable to log in with special characters in passwords",
       "difficulty": "hard",
+      "priority": "high",
       "estimated_time_minutes": 120,
-      "xp_reward": 200,
-      "gold_reward": 100,
-      "priority": "critical",
-      "subtasks": [
+      "rewards": {
+        "xp": 250,
+        "coins": 125
+      },
+      "tasks": [
         {
-          "id": "subtask_002_1",
-          "description": "Reproduce the bug in test environment",
-          "completed": false
+          "id": "T-reproduce",
+          "text": "Reproduce the bug in test environment"
         },
         {
-          "id": "subtask_002_2",
-          "description": "Identify root cause in authentication service",
-          "completed": false
+          "id": "T-debug",
+          "text": "Identify root cause in authentication service"
         },
         {
-          "id": "subtask_002_3",
-          "description": "Implement fix and add unit tests",
-          "completed": false
+          "id": "T-fix",
+          "text": "Implement fix and add unit tests"
+        },
+        {
+          "id": "T-deploy",
+          "text": "Deploy fix to staging environment"
         }
-      ],
-      "tags": ["bug", "authentication", "security"],
-      "auto_generated": true,
-      "completed": false
+      ]
     },
     {
-      "id": "todo_003",
-      "title": "Exercise for 30 minutes",
-      "description": "Go for a run or do home workout",
+      "id": "Q-workout001",
+      "title": "Complete Daily Workout",
+      "description": "30-minute exercise session",
       "difficulty": "easy",
-      "estimated_time_minutes": 30,
-      "xp_reward": 50,
-      "gold_reward": 25,
       "priority": "medium",
-      "subtasks": [],
-      "tags": ["health", "personal"],
-      "auto_generated": false,
-      "completed": false
+      "estimated_time_minutes": 30,
+      "rewards": {
+        "xp": 75,
+        "coins": 35
+      },
+      "tasks": [
+        {
+          "id": "T-warmup",
+          "text": "5-minute warm-up stretching"
+        },
+        {
+          "id": "T-cardio",
+          "text": "15 minutes of cardio exercise"
+        },
+        {
+          "id": "T-strength",
+          "text": "10 minutes of strength training"
+        }
+      ]
     }
-  ],
-  "metadata": {
-    "total_todos": 3,
-    "total_xp_available": 350,
-    "total_gold_available": 175,
-    "llm_processed": true,
-    "llm_model": "placeholder-model-name"
-  }
+  ]
 }

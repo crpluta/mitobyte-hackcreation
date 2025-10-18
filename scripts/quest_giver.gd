@@ -19,10 +19,15 @@ signal player_entered_range
 signal player_exited_range
 signal interaction_triggered
 
-# Colors for quest states
-const COLOR_AVAILABLE = Color(0.2, 0.8, 0.2)    # Green - quest available
-const COLOR_IN_PROGRESS = Color(0.8, 0.8, 0.2)  # Yellow - quest accepted
-const COLOR_COMPLETE = Color(0.3, 0.6, 1.0)     # Blue - ready to turn in
+# Colors for quest states - ONE-TIME QUESTS (green family)
+const COLOR_ONETIME_AVAILABLE = Color(0.2, 0.8, 0.2)     # Green
+const COLOR_ONETIME_IN_PROGRESS = Color(0.6, 0.8, 0.2)   # Yellow-green
+const COLOR_ONETIME_COMPLETE = Color(0.2, 0.8, 0.8)      # Cyan
+
+# Colors for quest states - DAILY QUESTS (blue family)
+const COLOR_DAILY_AVAILABLE = Color(0.3, 0.6, 1.0)       # Light Blue
+const COLOR_DAILY_IN_PROGRESS = Color(0.6, 0.4, 1.0)     # Purple
+const COLOR_DAILY_COMPLETE = Color(0.4, 0.9, 1.0)        # Bright Blue
 
 func _ready():
 	player = get_tree().get_first_node_in_group("player")
@@ -59,35 +64,61 @@ func update_visual_state():
 
 	# Check quest status in TodoManager
 	var is_accepted = quest_id in TodoManager.accepted_quests
-	var is_completed = quest_id in TodoManager.completed_quests
+	var is_turned_in = quest_id in TodoManager.completed_quests
+	var all_tasks_done = TodoManager.are_all_tasks_completed(quest_id)
+
+	# Get quest type (daily or one_time)
+	var quest_type = TodoManager.get_quest_type(quest_id)
 
 	# Create material if needed
 	if not material:
 		material = StandardMaterial3D.new()
 		mesh.set_surface_override_material(0, material)
 
+	# Select colors based on quest type
+	var color_available: Color
+	var color_in_progress: Color
+	var color_complete: Color
+
+	if quest_type == "daily":
+		color_available = COLOR_DAILY_AVAILABLE
+		color_in_progress = COLOR_DAILY_IN_PROGRESS
+		color_complete = COLOR_DAILY_COMPLETE
+	else:  # one_time
+		color_available = COLOR_ONETIME_AVAILABLE
+		color_in_progress = COLOR_ONETIME_IN_PROGRESS
+		color_complete = COLOR_ONETIME_COMPLETE
+
 	# Update color and marker based on state
-	if is_completed:
-		# Blue with ? - ready to turn in
-		material.albedo_color = COLOR_COMPLETE
+	if is_turned_in:
+		# Quest already turned in - gray
+		material.albedo_color = Color(0.5, 0.5, 0.5)
+		marker_label.text = ""
+		marker_label.modulate = Color(0.5, 0.5, 0.5)
+	elif is_accepted and all_tasks_done:
+		# All tasks complete, ready to turn in
+		material.albedo_color = color_complete
 		marker_label.text = "?"
-		marker_label.modulate = COLOR_COMPLETE
+		marker_label.modulate = color_complete
 	elif is_accepted:
-		# Yellow with ! - in progress
-		material.albedo_color = COLOR_IN_PROGRESS
+		# In progress
+		material.albedo_color = color_in_progress
 		marker_label.text = "!"
-		marker_label.modulate = COLOR_IN_PROGRESS
+		marker_label.modulate = color_in_progress
 	else:
-		# Green with ! - available
-		material.albedo_color = COLOR_AVAILABLE
+		# Available
+		material.albedo_color = color_available
 		marker_label.text = "!"
-		marker_label.modulate = COLOR_AVAILABLE
+		marker_label.modulate = color_available
 
 func get_quest_status() -> String:
 	if quest_id in TodoManager.completed_quests:
-		return "complete"
+		return "turned_in"
 	elif quest_id in TodoManager.accepted_quests:
-		return "in_progress"
+		if TodoManager.are_all_tasks_completed(quest_id):
+			return "complete"  # All tasks done, ready to turn in
+		else:
+			return "in_progress"  # Still working on tasks
 	else:
 		return "available"
 
@@ -98,7 +129,9 @@ func get_interaction_prompt() -> String:
 			"available":
 				return "Press E to view quest"
 			"in_progress":
-				return "Press E to check progress"
+				return "Press E to view quest"
 			"complete":
 				return "Press E to turn in quest"
+			"turned_in":
+				return ""  # No interaction for completed quests
 	return ""

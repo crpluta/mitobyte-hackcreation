@@ -13,10 +13,16 @@ extends CanvasLayer
 @onready var quest_desc = $QuestDialog/Container/QuestDesc
 @onready var quest_action_button = $QuestDialog/Container/ActionButton
 
+@onready var quest_log = $QuestLog
+@onready var quest_list_container = $QuestLog/Container/ScrollContainer/QuestList
+
 # Current quest interaction
 var current_quest_npc: Node3D = null
 var current_quest_id: String = ""
 var current_quest_data: Dictionary = {}
+
+# Track which NPC opened the dialog (for quest_type)
+var current_input_quest_type: String = "one_time"  # default
 
 func _ready():
 	print("UI Manager initialized")
@@ -26,13 +32,21 @@ func _ready():
 
 	hide_all()
 
-	# Connect to Deckard Cain signals
+	# Connect to Deckard Cain signals (one-time quests)
 	var deckard = get_tree().get_first_node_in_group("deckard_cain")
 	if deckard:
-		deckard.player_entered_range.connect(_on_deckard_entered_range)
-		deckard.player_exited_range.connect(_on_deckard_exited_range)
-		deckard.interaction_triggered.connect(_on_deckard_interaction)
+		deckard.player_entered_range.connect(func(): _on_npc_entered_range("Deckard Cain"))
+		deckard.player_exited_range.connect(_on_npc_exited_range)
+		deckard.interaction_triggered.connect(func(): _on_npc_interaction("one_time"))
 		print("Connected to Deckard Cain signals")
+
+	# Connect to Grindmaster Grok signals (daily quests)
+	var grok = get_tree().get_first_node_in_group("grindmaster_grok")
+	if grok:
+		grok.player_entered_range.connect(func(): _on_npc_entered_range("Grindmaster Grok"))
+		grok.player_exited_range.connect(_on_npc_exited_range)
+		grok.interaction_triggered.connect(func(): _on_npc_interaction("daily"))
+		print("Connected to Grindmaster Grok signals")
 
 	# Connect submit button
 	submit_button.pressed.connect(_on_submit_pressed)
@@ -43,12 +57,13 @@ func hide_all():
 	input_dialog.hide()
 	confirmation_label.hide()
 	quest_dialog.hide()
+	quest_log.hide()
 
-func _on_deckard_entered_range():
-	interaction_prompt.text = "Press E to talk to Deckard Cain"
+func _on_npc_entered_range(npc_name: String):
+	interaction_prompt.text = "Press E to talk to %s" % npc_name
 	interaction_prompt.show()
 
-func _on_deckard_exited_range():
+func _on_npc_exited_range():
 	interaction_prompt.hide()
 	input_dialog.hide()
 	if input_dialog.visible:
@@ -63,7 +78,8 @@ func show_quest_npc_prompt(npc: Node3D):
 func hide_quest_npc_prompt():
 	interaction_prompt.hide()
 
-func _on_deckard_interaction():
+func _on_npc_interaction(quest_type: String):
+	current_input_quest_type = quest_type
 	interaction_prompt.hide()
 	show_input_dialog()
 
@@ -105,16 +121,53 @@ func _on_submit_pressed():
 	get_tree().paused = false
 
 func save_user_input(text: String):
-	# Save to project directory so LLM team can access it
-	var file_path = "res://user_input.txt"
+	# Save to appropriate file based on quest type
+	var file_path = "res://user_input_onetime.txt" if current_input_quest_type == "one_time" else "res://user_input_daily.txt"
+
 	var file = FileAccess.open(file_path, FileAccess.WRITE)
 	if file:
 		file.store_string(text)
 		file.close()
-		print("Saved user input: ", text)
-		print("File saved to: ", ProjectSettings.globalize_path(file_path))
+		print("Saved user input (%s): %s" % [current_input_quest_type, text])
+
+		# Call Python script to generate quests
+		call_llm_script(file_path, current_input_quest_type)
 	else:
 		print("Failed to save user input!")
+
+func call_llm_script(input_file: String, quest_type: String):
+	"""Call the LLM Python script and import the generated quests"""
+
+	# Convert res:// path to absolute path
+	var abs_input_path = ProjectSettings.globalize_path(input_file)
+	var script_path = ProjectSettings.globalize_path("res://api/generate_quests.py")
+
+	print("Calling LLM script: ", script_path)
+	print("Input file: ", abs_input_path)
+
+	# Call Python script: python api/generate_quests.py --input user_input_onetime.txt
+	var output = []
+	var exit_code = OS.execute("python", [script_path, "--input", abs_input_path], output, true, false)
+
+	if exit_code != 0:
+		print("ERROR: Python script failed with exit code: ", exit_code)
+		print("Output: ", output)
+		return
+
+	# output is an array with stdout
+	if output.is_empty():
+		print("ERROR: No output from Python script")
+		return
+
+	var json_output = output[0]  # First element is stdout
+	print("Received JSON from LLM script (length: %d)" % json_output.length())
+
+	# Import quests into TodoManager
+	var success = TodoManager.import_quests_from_json(json_output, quest_type)
+	if success:
+		print("Successfully imported %s quests!" % quest_type)
+	else:
+		print("Failed to import quests from LLM output")
 
 func _input(event):
 	if input_dialog.visible and event.is_action_pressed("ui_cancel"):
@@ -125,9 +178,14 @@ func _input(event):
 		quest_dialog.hide()
 		interaction_prompt.show()
 		get_tree().paused = false
+	elif quest_log.visible and (event.is_action_pressed("ui_cancel") or event.is_action_pressed("quest_log")):
+		quest_log.hide()
+		get_tree().paused = false
+	elif event.is_action_pressed("quest_log") and not is_dialog_open():
+		toggle_quest_log()
 
 func is_dialog_open() -> bool:
-	return input_dialog.visible or quest_dialog.visible
+	return input_dialog.visible or quest_dialog.visible or quest_log.visible
 
 func show_quest_dialog(npc: Node3D, todo: Dictionary, quest_id: String):
 	current_quest_npc = npc
@@ -143,14 +201,34 @@ func show_quest_dialog(npc: Node3D, todo: Dictionary, quest_id: String):
 	# Set quest info
 	quest_title.text = todo.get("title", "Unknown Quest")
 
-	var info_text = "Time: %d min | Priority: %s | XP: %d | Gold: %d" % [
+	var rewards = todo.get("rewards", {})
+	var info_text = "Time: %d min | Difficulty: %s | Priority: %s | XP: %d | Coins: %d" % [
 		todo.get("estimated_time_minutes", 0),
+		todo.get("difficulty", "medium"),
 		todo.get("priority", "medium"),
-		todo.get("xp_reward", 0),
-		todo.get("gold_reward", 0)
+		rewards.get("xp", 0),
+		rewards.get("coins", 0)
 	]
 	quest_info.text = info_text
-	quest_desc.text = todo.get("description", "No description")
+
+	# Build description with tasks
+	var desc_text = todo.get("description", "No description")
+	desc_text += "\n\n[b]Tasks:[/b]"
+
+	var tasks = todo.get("tasks", [])
+	var completed_tasks = TodoManager.get_completed_tasks_for_quest(quest_id)
+
+	for task in tasks:
+		var task_id = task.get("id", "")
+		var task_text = task.get("text", "")
+		var is_complete = task_id in completed_tasks
+
+		if is_complete:
+			desc_text += "\n[color=green][✓][/color] " + task_text
+		else:
+			desc_text += "\n[ ] " + task_text
+
+	quest_desc.text = desc_text
 
 	# Set button based on quest status
 	var status = npc.get_quest_status()
@@ -159,11 +237,14 @@ func show_quest_dialog(npc: Node3D, todo: Dictionary, quest_id: String):
 			quest_action_button.text = "Accept Quest"
 			quest_action_button.disabled = false
 		"in_progress":
-			quest_action_button.text = "Quest In Progress..."
+			quest_action_button.text = "Open Quest Log (Q)"
 			quest_action_button.disabled = true
 		"complete":
 			quest_action_button.text = "Turn In Quest"
 			quest_action_button.disabled = false
+		"turned_in":
+			quest_action_button.text = "Already Completed"
+			quest_action_button.disabled = true
 
 	quest_dialog.show()
 
@@ -186,3 +267,90 @@ func _on_quest_action_pressed():
 			quest_dialog.hide()
 			get_tree().paused = false
 			print("Quest completed: ", current_quest_data.get("title", ""))
+			# TODO: Show reward notification
+
+func toggle_quest_log():
+	if quest_log.visible:
+		quest_log.hide()
+		get_tree().paused = false
+	else:
+		populate_quest_log()
+		quest_log.show()
+		get_tree().paused = true
+
+func populate_quest_log():
+	# Clear existing quest items
+	for child in quest_list_container.get_children():
+		child.queue_free()
+
+	var accepted_quests = TodoManager.get_accepted_quests()
+
+	if accepted_quests.is_empty():
+		var label = Label.new()
+		label.text = "No active quests. Talk to quest-giver NPCs to accept quests!"
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		quest_list_container.add_child(label)
+		return
+
+	# Add each quest with its tasks
+	for quest in accepted_quests:
+		var quest_id = quest.get("id", "")
+		var quest_title_text = quest.get("title", "Unknown Quest")
+		var tasks = quest.get("tasks", [])
+		var rewards = quest.get("rewards", {})
+
+		# Quest header
+		var quest_panel = PanelContainer.new()
+		var quest_vbox = VBoxContainer.new()
+		quest_panel.add_child(quest_vbox)
+
+		# Title
+		var title_label = Label.new()
+		title_label.text = "[b]%s[/b]" % quest_title_text
+		title_label.add_theme_font_size_override("font_size", 20)
+		quest_vbox.add_child(title_label)
+
+		# Info line
+		var info_label = Label.new()
+		info_label.text = "XP: %d | Coins: %d" % [rewards.get("xp", 0), rewards.get("coins", 0)]
+		info_label.add_theme_font_size_override("font_size", 14)
+		quest_vbox.add_child(info_label)
+
+		# Spacer
+		var spacer = Control.new()
+		spacer.custom_minimum_size = Vector2(0, 10)
+		quest_vbox.add_child(spacer)
+
+		# Tasks with checkboxes
+		for task in tasks:
+			var task_id = task.get("id", "")
+			var task_text = task.get("text", "")
+			var is_completed = TodoManager.is_task_completed(quest_id, task_id)
+
+			var task_hbox = HBoxContainer.new()
+
+			# Checkbox
+			var checkbox = CheckBox.new()
+			checkbox.button_pressed = is_completed
+			checkbox.toggled.connect(func(checked): _on_task_checkbox_toggled(quest_id, task_id, checked))
+			task_hbox.add_child(checkbox)
+
+			# Task text
+			var task_label = Label.new()
+			task_label.text = task_text
+			task_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			task_hbox.add_child(task_label)
+
+			quest_vbox.add_child(task_hbox)
+
+		quest_list_container.add_child(quest_panel)
+
+		# Separator
+		var separator = Control.new()
+		separator.custom_minimum_size = Vector2(0, 15)
+		quest_list_container.add_child(separator)
+
+func _on_task_checkbox_toggled(quest_id: String, task_id: String, checked: bool):
+	TodoManager.toggle_task(quest_id, task_id)
+	# Refresh the quest log to show updated state
+	populate_quest_log()

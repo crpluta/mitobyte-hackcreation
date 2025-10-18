@@ -1,7 +1,7 @@
 # JSON Schema for LLM Team
 
 ## Overview
-Your Python script will take user input text and output a JSON file containing split todos.
+Your Python script will take user input text and output a JSON file containing quests with tasks.
 
 ## File Location
 Please output to: `todos.json` (in project root)
@@ -12,16 +12,28 @@ We'll watch for this file and reload it when it changes.
 
 ```json
 {
-  "user_input": "Original text the player typed",
-  "timestamp": "2025-10-18T10:30:00Z",
-  "todos": [
+  "quests": [
     {
-      "title": "Short quest title (3-5 words)",
-      "description": "Detailed description of what needs to be done",
-      "xp_reward": 100,
-      "gold_reward": 50,
-      "estimated_time_minutes": 60,
-      "priority": "high"
+      "id": "Q-abc123def",
+      "title": "Short quest title (3-7 words)",
+      "description": "Overall quest description",
+      "difficulty": "easy",
+      "priority": "high",
+      "estimated_time_minutes": 120,
+      "rewards": {
+        "xp": 200,
+        "coins": 100
+      },
+      "tasks": [
+        {
+          "id": "T-xyz789",
+          "text": "Specific task description"
+        },
+        {
+          "id": "T-abc456",
+          "text": "Another specific task"
+        }
+      ]
     }
   ]
 }
@@ -29,61 +41,156 @@ We'll watch for this file and reload it when it changes.
 
 ## Field Descriptions
 
-### Root Level
-- **user_input** (string, required): The original text the player entered
-- **timestamp** (string, required): ISO 8601 timestamp when generated
-- **todos** (array, required): Array of todo objects
-
-### Todo Object - Required Fields
+### Quest Object - Required Fields
+- **id** (string, required): Stable quest ID (your script generates this via hash)
 - **title** (string, required): Short quest name for display (3-7 words ideal)
-- **description** (string, required): Detailed explanation of the task
-- **xp_reward** (integer, required): Experience points (suggest: 50-200 range)
-- **gold_reward** (integer, required): Gold coins (suggest: 25-100 range)
-- **estimated_time_minutes** (integer, required): Rough estimate for completion - helps player plan their day
-- **priority** (string, required): "low", "medium", or "high" - affects NPC placement (high priority = closer to spawn, but still scattered)
+- **description** (string, required): Overall description of what this quest is about
+- **difficulty** (string, required): "easy", "medium", "hard", or "epic"
+- **priority** (string, required): "low", "medium", or "high" - affects NPC placement distance
+- **estimated_time_minutes** (integer, required): Total time estimate for ALL tasks combined
+- **rewards** (object, required):
+  - **xp** (integer, required): Experience points (suggest: 50-300 range based on difficulty)
+  - **coins** (integer, required): Gold coins (suggest: 25-150 range)
+- **tasks** (array, required): Array of individual task objects
 
-**Note:** The game will auto-generate unique IDs for each todo when loading the JSON, so you don't need to include an "id" field.
+**Note:** Do NOT include `quest_type` - the game assigns this internally based on which NPC triggered the request.
 
-### Todo Object - Optional Fields
-- **difficulty** (string): "easy", "medium", or "hard" - visual flavor
-- **category** (string): Group similar tasks (e.g., "work", "personal", "health")
+### Task Object - Required Fields
+- **id** (string, required): Stable task ID (your script generates this via hash)
+- **text** (string, required): Clear description of this specific task
 
-## Example
+**Important:** Do NOT include `status`, `completed_at`, `category`, or `progress` fields. The game manages task completion state internally.
+
+## File Flow
+
+The game has TWO NPCs that trigger quest generation:
+
+### 1. Deckard Cain (One-Time Quests)
+**Input:** `user_input_onetime.txt` - Player's long-term goals, project work, one-off tasks
+**Output:** `todos_onetime.json` - Your script writes fresh quests here (overwrites each time)
+**Game Action:** Imports these quests and tags them internally as "one_time" → spawns green NPCs
+
+### 2. Profession Trainer (Daily Quests)
+**Input:** `user_input_daily.txt` - Player's daily habits, recurring tasks
+**Output:** `todos_daily.json` - Your script writes fresh quests here (overwrites each time)
+**Game Action:** Imports these quests and tags them internally as "daily" → spawns blue NPCs
+
+### Your Script's Job
+1. Watch BOTH input files
+2. When `user_input_onetime.txt` changes → process it → write to `todos_onetime.json`
+3. When `user_input_daily.txt` changes → process it → write to `todos_daily.json`
+4. You can overwrite the output files each time - game handles merging with existing state
+5. Do NOT track quest progress, status, or quest_type - game handles all that
+
+## Example - One-Time Quests
+
+User talks to Deckard, types: *"I need to finish my project documentation and go to the gym"*
+
+Saved to: `user_input_onetime.txt`
+
+Your script outputs to `todos_onetime.json`:
 
 ```json
 {
-  "user_input": "I need to finish my project documentation and go to the gym",
-  "timestamp": "2025-10-18T14:30:00Z",
-  "todos": [
+  "quests": [
     {
-      "title": "Write project README",
-      "description": "Create comprehensive README.md with setup instructions, API docs, and examples",
-      "xp_reward": 150,
-      "gold_reward": 75,
-      "estimated_time_minutes": 60,
-      "priority": "high",
+      "id": "Q-a1b2c3d4e5",
+      "title": "Complete Project Documentation",
+      "description": "Finish all documentation tasks for the project including README and API docs",
       "difficulty": "medium",
-      "category": "work"
+      "priority": "high",
+      "estimated_time_minutes": 105,
+      "rewards": {
+        "xp": 200,
+        "coins": 100
+      },
+      "tasks": [
+        {
+          "id": "T-xyz123",
+          "text": "Write comprehensive README.md with setup instructions"
+        },
+        {
+          "id": "T-abc456",
+          "text": "Document all REST API endpoints with request/response examples"
+        }
+      ]
     },
     {
-      "title": "Document API endpoints",
-      "description": "Write detailed documentation for all REST API endpoints including request/response examples",
-      "xp_reward": 120,
-      "gold_reward": 60,
-      "estimated_time_minutes": 45,
-      "priority": "high",
-      "difficulty": "medium",
-      "category": "work"
-    },
-    {
-      "title": "30-minute gym workout",
-      "description": "Complete a 30-minute workout session at the gym including cardio and strength training",
-      "xp_reward": 100,
-      "gold_reward": 50,
-      "estimated_time_minutes": 30,
-      "priority": "medium",
+      "id": "Q-f9g8h7i6j5",
+      "title": "Complete Gym Workout",
+      "description": "30-minute workout session at the gym",
       "difficulty": "easy",
-      "category": "health"
+      "priority": "medium",
+      "estimated_time_minutes": 30,
+      "rewards": {
+        "xp": 100,
+        "coins": 50
+      },
+      "tasks": [
+        {
+          "id": "T-def789",
+          "text": "Complete 30 minutes of cardio exercise"
+        },
+        {
+          "id": "T-ghi012",
+          "text": "Complete strength training routine"
+        }
+      ]
+    }
+  ]
+}
+```
+
+## Example - Daily Quests
+
+User talks to Profession Trainer, types: *"Practice coding and meditation"*
+
+Saved to: `user_input_daily.txt`
+
+Your script outputs to `todos_daily.json` (separate file, fresh each time):
+
+```json
+{
+  "quests": [
+    {
+      "id": "Q-daily001",
+      "title": "Daily Coding Practice",
+      "description": "Work on coding skills and algorithms",
+      "difficulty": "medium",
+      "priority": "high",
+      "estimated_time_minutes": 60,
+      "rewards": {
+        "xp": 120,
+        "coins": 60
+      },
+      "tasks": [
+        {
+          "id": "T-code001",
+          "text": "Solve 2 LeetCode problems"
+        },
+        {
+          "id": "T-code002",
+          "text": "Read documentation for 20 minutes"
+        }
+      ]
+    },
+    {
+      "id": "Q-daily002",
+      "title": "Daily Meditation",
+      "description": "Mindfulness and relaxation practice",
+      "difficulty": "easy",
+      "priority": "medium",
+      "estimated_time_minutes": 15,
+      "rewards": {
+        "xp": 50,
+        "coins": 25
+      },
+      "tasks": [
+        {
+          "id": "T-med001",
+          "text": "Complete 15-minute guided meditation"
+        }
+      ]
     }
   ]
 }
@@ -91,38 +198,53 @@ We'll watch for this file and reload it when it changes.
 
 ## NPC Placement Logic (Game-Side)
 
-The game uses **priority** to influence NPC placement:
-- **High priority**: NPCs spawn 5-15 units from player start (still with randomization)
-- **Medium priority**: NPCs spawn 10-25 units from player start
-- **Low priority**: NPCs spawn 15-35 units from player start
+The game spawns **one NPC per quest** (up to a cap). Visual coding:
+- **Blue NPCs** = Daily quests
+- **Green NPCs** = One-time quests
 
-All placements include random scatter within those ranges for natural exploration.
+Priority affects placement distance:
+- **High priority**: NPC spawns 5-15 units from player start (close)
+- **Medium priority**: NPC spawns 10-25 units from player start
+- **Low priority**: NPC spawns 15-35 units from player start (far)
 
-**estimated_time_minutes** helps players decide which quests to tackle first (shown in UI).
+**NPC Cap:** Maximum 15 quest-giver NPCs spawned at once. If more quests exist, higher priority quests spawn first.
 
 ## Notes for LLM Processing
 
 **DO:**
-- Split vague tasks into specific, actionable todos
-- Give higher XP/Gold for harder or longer tasks
+- Create separate quests for unrelated activities (e.g., "documentation" and "gym" are two quests)
+- Group related tasks under the same quest (e.g., "write README" and "write API docs" → one documentation quest)
+- Break each quest into specific, actionable task objects
+- Set total `estimated_time_minutes` as sum of all tasks in that quest
+- Give higher XP/coins for harder or longer quests
 - Set priority based on urgency (deadlines = high, nice-to-have = low)
-- Estimate realistic completion times
-- Make descriptions clear and motivating
-- Ensure each todo is completable in one session
+- Make task text clear and actionable
+- Use concise quest titles (3-7 words)
 
 **DON'T:**
-- Include game-specific fields (npc_id, completed status, etc.) - we handle those
-- Make todos too granular (we're not micromanaging)
+- Include `status`, `completed_at`, `category`, or `progress` fields
+- Combine unrelated activities into one quest
+- Make tasks too granular (we're not micromanaging)
 - Use negative language in descriptions
-- Set everything as high priority (defeats the purpose!)
+- Set everything as high priority!
 
 ## Integration Flow
 
-1. Player talks to Deckard Cain in-game
-2. Player types what they need to do
-3. Game saves this text for your script to read
-4. Your Python script processes it → Outputs `todos.json`
-5. Game detects file change → Loads todos → Assigns to NPCs
-6. Player finds NPCs around map and accepts quests
-7. Player does tasks in real life
-8. Player returns to NPC to mark complete → Gets rewards!
+### One-Time Quests (Deckard Cain)
+1. Player talks to Deckard Cain → Types long-term goals → Game saves to `user_input_onetime.txt`
+2. Your script watches file → Processes input → Writes to `todos_onetime.json` (overwrites)
+3. Game detects `todos_onetime.json` changed → Imports quests → Tags as "one_time" internally → Spawns green NPCs
+4. Player finds green NPC → Accepts quest → Opens Quest Log (Q) → Checks off tasks IRL
+5. When all tasks checked → NPC turns blue with "?" → Player returns → Turns in → Gets rewards
+
+### Daily Quests (Profession Trainer)
+1. Player talks to Profession Trainer → Types daily habits → Game saves to `user_input_daily.txt`
+2. Your script watches file → Processes input → Writes to `todos_daily.json` (overwrites)
+3. Game detects `todos_daily.json` changed → Imports quests → Tags as "daily" internally → Spawns blue NPCs
+4. Rest of flow same as one-time quests
+
+### Game State Management
+- Game maintains persistent state for all quests (accepted, task progress, completed)
+- Python script only generates fresh quest templates - no state tracking
+- Quest IDs allow game to merge new versions with existing progress
+- Completed quests stay in game state even if script re-generates them
