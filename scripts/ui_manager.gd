@@ -467,9 +467,12 @@ func populate_quest_log():
 		quest_panel.add_child(quest_vbox)
 
 		# Title
-		var title_label = Label.new()
+		var title_label = RichTextLabel.new()
+		title_label.bbcode_enabled = true
 		title_label.text = "[b]%s[/b]" % quest_title_text
-		title_label.add_theme_font_size_override("font_size", 20)
+		title_label.add_theme_font_size_override("normal_font_size", 20)
+		title_label.fit_content = true
+		title_label.scroll_active = false
 		quest_vbox.add_child(title_label)
 
 		# Info line
@@ -636,10 +639,13 @@ func _update_active_quests_hud(_quest_id: String):
 				frequency_badge = ""
 				title_color = Color(0.3, 1.0, 0.3)  # Green
 
-		var title_label = Label.new()
+		var title_label = RichTextLabel.new()
+		title_label.bbcode_enabled = true
 		title_label.text = "[b]%s%s[/b]" % [frequency_badge, quest_title]
-		title_label.add_theme_font_size_override("font_size", 16)
-		title_label.add_theme_color_override("font_color", title_color)
+		title_label.add_theme_font_size_override("normal_font_size", 16)
+		title_label.add_theme_color_override("default_color", title_color)
+		title_label.fit_content = true
+		title_label.scroll_active = false
 
 		active_quests_list.add_child(title_label)
 
@@ -717,9 +723,12 @@ func populate_shop():
 		item_hbox.add_child(info_vbox)
 
 		# Item name
-		var name_label = Label.new()
+		var name_label = RichTextLabel.new()
+		name_label.bbcode_enabled = true
 		name_label.text = "[b]%s[/b]" % item.name
-		name_label.add_theme_font_size_override("font_size", 18)
+		name_label.add_theme_font_size_override("normal_font_size", 18)
+		name_label.fit_content = true
+		name_label.scroll_active = false
 		info_vbox.add_child(name_label)
 
 		# Description
