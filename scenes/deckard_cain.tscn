@@ -1,0 +1,25 @@
+[gd_scene load_steps=4 format=3 uid="uid://dpmc8x3h5qw2k"]
+
+[ext_resource type="Script" path="res://scripts/deckard_cain.gd" id="1_deckard"]
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_cain"]
+top_radius = 0.6
+bottom_radius = 0.6
+height = 2.5
+
+[sub_resource type="StandardMaterial3D" id="Material_cain"]
+albedo_color = Color(0.4, 0.3, 0.8, 1)
+
+[node name="DeckardCain" type="Node3D" groups=["npc", "deckard_cain"]]
+script = ExtResource("1_deckard")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.25, 0)
+mesh = SubResource("CylinderMesh_cain")
+surface_material_override/0 = SubResource("Material_cain")
+
+[node name="InteractionLabel" type="Label3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3, 0)
+text = "Deckard Cain"
+font_size = 32
+outline_size = 8

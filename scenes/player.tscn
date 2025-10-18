@@ -10,7 +10,7 @@ height = 2.0
 radius = 0.5
 height = 2.0
 
-[node name="Player" type="CharacterBody3D"]
+[node name="Player" type="CharacterBody3D" groups=["player"]]
 script = ExtResource("1_player")
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="."]
