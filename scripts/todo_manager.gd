@@ -74,7 +74,12 @@ func load_todos_from_file(file_path: String = "res://todos.json"):
 
 func import_quests_from_json(json_string: String, quest_type: String) -> bool:
 	"""Import quests from JSON string and tag them with quest_type (daily or one_time)
-	Merges with existing quests, preserving progress for matching quest IDs"""
+	Merges with existing quests, preserving progress for matching quest IDs
+
+	Handles TWO formats:
+	1. Python team format: Single quest object {...}
+	2. Our format: {"quests": [...]}
+	"""
 
 	var json = JSON.new()
 	var parse_result = json.parse(json_string)
@@ -84,16 +89,51 @@ func import_quests_from_json(json_string: String, quest_type: String) -> bool:
 		return false
 
 	var data = json.data
-	if not data.has("quests"):
-		print("Invalid import JSON - missing 'quests' field")
-		return false
+	var imported_quests = []
 
-	var imported_quests = data.get("quests", [])
+	# Handle both formats
+	if data.has("quests"):
+		# Our format: {"quests": [...]}
+		imported_quests = data.get("quests", [])
+	elif data.has("id") and data.has("tasks"):
+		# Python team format: Single quest object
+		imported_quests = [data]
+	else:
+		print("Invalid import JSON - expected single quest or {quests: [...]}")
+		return false
 
 	for quest in imported_quests:
 		var quest_id = quest.get("id", "")
 		if quest_id.is_empty():
 			continue
+
+		# Map difficulty -> priority for placement (Python team doesn't have priority field)
+		if not quest.has("priority"):
+			var difficulty = quest.get("difficulty", "medium")
+			match difficulty:
+				"easy":
+					quest["priority"] = "low"  # Easy tasks = far away
+				"medium":
+					quest["priority"] = "medium"
+				"hard", "epic":
+					quest["priority"] = "high"  # Hard tasks = close by
+				_:
+					quest["priority"] = "medium"
+
+		# Add estimated_time_minutes if missing (default based on difficulty)
+		if not quest.has("estimated_time_minutes"):
+			var difficulty = quest.get("difficulty", "medium")
+			match difficulty:
+				"easy":
+					quest["estimated_time_minutes"] = 15
+				"medium":
+					quest["estimated_time_minutes"] = 30
+				"hard":
+					quest["estimated_time_minutes"] = 60
+				"epic":
+					quest["estimated_time_minutes"] = 120
+				_:
+					quest["estimated_time_minutes"] = 30
 
 		# Check if quest already exists
 		var existing_quest = null
