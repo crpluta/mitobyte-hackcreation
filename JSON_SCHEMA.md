@@ -8,36 +8,37 @@ Please output to: `todos.json` (in project root)
 
 We'll watch for this file and reload it when it changes.
 
-## Required Schema
+## Your Output Format (Python Script)
+
+**Output to stdout** - a single quest object:
 
 ```json
 {
-  "quests": [
+  "id": "Q-abc123def",
+  "title": "Short quest title (3-7 words)",
+  "description": "Overall quest description",
+  "difficulty": "easy",
+  "rewards": {
+    "xp": 200,
+    "coins": 100
+  },
+  "tasks": [
     {
-      "id": "Q-abc123def",
-      "title": "Short quest title (3-7 words)",
-      "description": "Overall quest description",
-      "difficulty": "easy",
-      "priority": "high",
-      "estimated_time_minutes": 120,
-      "rewards": {
-        "xp": 200,
-        "coins": 100
-      },
-      "tasks": [
-        {
-          "id": "T-xyz789",
-          "text": "Specific task description"
-        },
-        {
-          "id": "T-abc456",
-          "text": "Another specific task"
-        }
-      ]
+      "id": "T-xyz789",
+      "text": "Specific task description"
+    },
+    {
+      "id": "T-abc456",
+      "text": "Another specific task"
     }
   ]
 }
 ```
+
+**Note:** Game's import layer will automatically:
+- Map `difficulty` to NPC placement distance ("easy" = far, "hard"/"epic" = close)
+- Add defaults for any missing fields
+- Wrap your single quest into internal format
 
 ## Field Descriptions
 
@@ -46,14 +47,17 @@ We'll watch for this file and reload it when it changes.
 - **title** (string, required): Short quest name for display (3-7 words ideal)
 - **description** (string, required): Overall description of what this quest is about
 - **difficulty** (string, required): "easy", "medium", "hard", or "epic"
-- **priority** (string, required): "low", "medium", or "high" - affects NPC placement distance
-- **estimated_time_minutes** (integer, required): Total time estimate for ALL tasks combined
+  - Game maps this to NPC placement: easy=far, medium=medium, hard/epic=close
 - **rewards** (object, required):
   - **xp** (integer, required): Experience points (suggest: 50-300 range based on difficulty)
   - **coins** (integer, required): Gold coins (suggest: 25-150 range)
 - **tasks** (array, required): Array of individual task objects
 
-**Note:** Do NOT include `quest_type` - the game assigns this internally based on which NPC triggered the request.
+### Optional Fields (game auto-fills if missing)
+- **estimated_time_minutes** (integer): Time estimate - game defaults based on difficulty if not provided
+- **priority** (string): Game derives this from difficulty automatically
+
+**Note:** Do NOT include `quest_type`, `status`, `completed_at`, `category`, or `progress` - the game manages these internally.
 
 ### Task Object - Required Fields
 - **id** (string, required): Stable task ID (your script generates this via hash)

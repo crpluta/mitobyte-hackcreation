@@ -45,23 +45,25 @@ func spawn_quest_givers():
 			npc.queue_free()
 	spawned_npcs.clear()
 
-	# Sort todos by priority (high -> medium -> low)
-	var sorted_todos = TodoManager.all_todos.duplicate()
-	sorted_todos.sort_custom(func(a, b):
+	# Get all quests (available, accepted, and completed - we show all with different colors)
+	var all_quests = TodoManager.all_todos.duplicate()
+
+	# Sort by priority (high -> medium -> low)
+	all_quests.sort_custom(func(a, b):
 		var priority_a = PRIORITY_ORDER.get(a.get("priority", "medium"), 1)
 		var priority_b = PRIORITY_ORDER.get(b.get("priority", "medium"), 1)
 		return priority_a < priority_b  # Lower number = higher priority
 	)
 
-	# Spawn NPCs up to the cap
-	var spawn_count = min(sorted_todos.size(), max_npcs)
+	# Spawn NPCs up to the cap (includes all quest states)
+	var spawn_count = min(all_quests.size(), max_npcs)
 	for i in range(spawn_count):
-		spawn_quest_giver(sorted_todos[i])
+		spawn_quest_giver(all_quests[i])
 
-	if sorted_todos.size() > max_npcs:
-		print("WARNING: %d quests available but only spawning %d NPCs (cap)" % [sorted_todos.size(), max_npcs])
+	if all_quests.size() > max_npcs:
+		print("WARNING: %d quests total but only spawning %d NPCs (cap)" % [all_quests.size(), max_npcs])
 
-	print("Spawned %d quest-giver NPCs" % spawned_npcs.size())
+	print("Spawned %d quest-giver NPCs (available + in-progress + ready to turn in)" % spawned_npcs.size())
 
 func spawn_quest_giver(todo: Dictionary):
 	if not quest_giver_scene:
