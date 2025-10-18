@@ -12,8 +12,94 @@ from urllib import request, error
 SYSTEM_INSTRUCTIONS = (
     "You are a helpful assistant that converts a plain list of tasks into a single game-like Quest JSON object. "
     "Output STRICT JSON only with no markdown or commentary. Use concise, clear titles and descriptions. "
-    "Always include reasonable rewards."
+    "Always include reasonable rewards. "
+    "If the user input is not clear ask for clarity and wait to generate tasks until clear input. "
+    "Make a user input need to be at least 3 characters and alert the user if they need to update their input. "
+    "Do not generate a quest if the user input text is less than 3 characters. "
+    "If the user enters gibberish please ask for clarity so that the quests is clear and simple tasks."
 )
+
+
+COMMON_TASK_WORDS = {
+    # Common verbs
+    "plan", "prepare", "write", "review", "update", "create", "build", "design", "test", "deploy",
+    "research", "organize", "clean", "practice", "study", "learn", "call", "email", "schedule",
+    "draft", "read", "analyze", "improve", "fix", "debug", "code", "submit", "complete", "assemble",
+    "document", "sketch", "present", "train", "brainstorm", "evaluate", "deliver",
+    "install", "configure", "refine", "optimize", "monitor", "report", "coordinate",
+    "cook", "bake", "shop", "exercise", "walk", "run", "workout", "record",
+    "edit", "upload", "publish", "arrange", "budget", "investigate", "organise", "planify",
+    "research", "prototype", "outline", "prepare", "assist", "support", "manage", "organize",
+    "develop", "draft", "collect", "gather", "practice", "negotiate", "brainstorm", "document",
+    "calibrate", "assemble", "summarize", "prioritize", "refactor", "automate", "prototype",
+    "paint", "draw", "design", "compose", "record", "mentor", "coach", "build",
+    # Common nouns/objects
+    "presentation", "proposal", "meeting", "report", "summary", "article", "blog", "video", "module",
+    "feature", "design", "project", "task", "assignment", "homework", "plan", "timeline",
+    "notes", "itinerary", "experiment", "exercise", "lesson", "workout", "cleanup",
+    "laundry", "groceries", "budget", "resume", "portfolio", "documentation", "deployment",
+    "release", "feedback", "analysis", "research", "draft", "strategy", "campaign", "presentation",
+    "prototype", "blueprint", "roadmap", "calendar", "agenda", "vacation", "dinner", "lunch",
+    "breakfast", "meal", "shopping", "garden", "workshop", "seminar", "webinar", "invoice",
+    "website", "content", "lesson", "exercise", "journal", "summary", "overview", "travel",
+    "meditation", "meditate", "presentation", "reflection", "strategy", "analysis"
+}
+
+BASIC_ENGLISH_WORDS = {
+    "the", "and", "for", "with", "from", "into", "about", "over", "under", "after", "before",
+    "team", "client", "customer", "project", "task", "goal", "milestone", "deadline",
+    "complete", "finish", "start", "begin", "launch", "deliver", "prepare", "organize",
+    "plan", "planning", "strategy", "strategic", "analysis", "analyze", "research", "study",
+    "lesson", "assignment", "homework", "essay", "paper", "report", "presentation", "slides",
+    "meeting", "agenda", "minutes", "notes", "follow", "review", "feedback", "summary",
+    "update", "upgrade", "improve", "refine", "optimize", "support", "assist", "help",
+    "documentation", "document", "manual", "guide", "outline", "draft", "prototype",
+    "feature", "module", "system", "application", "software", "hardware", "server",
+    "deploy", "release", "build", "develop", "design", "code", "debug", "fix", "test",
+    "quality", "assurance", "qa", "integration", "unit", "automation", "pipeline",
+    "marketing", "campaign", "content", "social", "media", "email", "newsletter",
+    "finance", "budget", "invoice", "expense", "revenue", "profit", "reporting",
+    "sales", "lead", "prospect", "call", "followup", "deal", "contract", "proposal",
+    "training", "coaching", "mentoring", "practice", "exercise", "fitness", "health",
+    "nutrition", "meal", "recipe", "dinner", "lunch", "breakfast", "grocery", "shopping",
+    "house", "home", "apartment", "cleaning", "laundry", "organization", "declutter",
+    "travel", "trip", "journey", "vacation", "holiday", "flight", "hotel", "booking",
+    "itinerary", "packing", "reservation", "ticket", "passport", "visa",
+    "garden", "yard", "maintenance", "repair", "fix", "upgrade", "install",
+    "study", "learn", "practice", "skill", "language", "english", "spanish", "french",
+    "music", "piano", "guitar", "violin", "lesson", "practice", "rehearsal",
+    "writing", "reading", "drawing", "painting", "creative", "brainstorm",
+    "family", "friend", "community", "volunteer", "event", "planning",
+    "career", "resume", "portfolio", "interview", "application", "network",
+    "health", "doctor", "appointment", "medication", "therapy", "wellness",
+    "finance", "savings", "investment", "insurance", "taxes", "budgeting",
+    "school", "class", "lecture", "study", "exam", "quiz", "project",
+    "research", "data", "analysis", "survey", "report", "presentation",
+    "cleanup", "organize", "arrange", "coordinate", "manage", "plan",
+    "meeting", "call", "email", "message", "respond", "reply", "confirm",
+    "prepare", "setup", "configure", "install", "calibrate", "test",
+    "collect", "gather", "analyze", "summarize", "prioritize", "delegate",
+    "create", "edit", "review", "publish", "share", "submit", "approve",
+    "monitor", "track", "measure", "report", "audit", "inspect",
+    "brainstorm", "ideate", "innovate", "prototype", "refactor",
+    "optimize", "streamline", "simplify", "clarify", "document",
+    "prepare", "pack", "schedule", "calendar", "timeline",
+    "festival", "conference", "workshop", "seminar", "webinar",
+    "budget", "forecast", "analysis", "planning", "strategy",
+    "support", "maintain", "upgrade", "transition", "handoff",
+    "lesson", "module", "course", "curriculum", "syllabus",
+    "projector", "laptop", "device", "network", "security",
+    "policy", "procedure", "compliance", "audit", "risk",
+    "inventory", "supplies", "asset", "equipment", "tool",
+    "feedback", "survey", "assessment", "evaluation",
+    "goal", "objective", "milestone", "deliverable",
+    "celebrate", "appreciate", "recognize", "reward",
+    "brainstorming", "collaborate", "coordinate", "communicate",
+    "drafting", "editing", "formatting", "proofread",
+    "developing", "testing", "deploying", "supporting"
+}
+
+KNOWN_TASK_WORDS = COMMON_TASK_WORDS | BASIC_ENGLISH_WORDS
 
 
 SCHEMA_GUIDE = {
@@ -54,6 +140,53 @@ def _parse_tasks(content: str) -> List[str]:
             if p:
                 tasks.append(p)
     return tasks
+
+
+def _looks_like_gibberish(text: str) -> bool:
+    # Tokenize alphabetical words
+    words = re.findall(r"[A-Za-z]+", text)
+    if not words:
+        return True
+
+    normalized_words = [w.lower() for w in words]
+    if not normalized_words:
+        return True
+
+    known_hits = sum(1 for w in normalized_words if w in KNOWN_TASK_WORDS)
+    if known_hits >= max(1, len(normalized_words) // 2):
+        return False
+
+    letters = re.findall(r"[A-Za-z]", text)
+    if len(letters) < 3:
+        return True
+    vowels = sum(1 for ch in letters if ch.lower() in "aeiou")
+    if vowels == 0:
+        return True
+
+    unique_letters = {ch.lower() for ch in letters}
+    if len(unique_letters) <= 1:
+        return True
+
+    consonant_runs = re.findall(r"(?i)[b-df-hj-np-tv-z]{4,}", text)
+    if consonant_runs:
+        return True
+
+    if len(normalized_words) == 1 and len(normalized_words[0]) <= 3:
+        # Single short word not in known list; likely unclear
+        return True
+
+    # Without clear known words, treat as unclear, but allow common short phrases like "go to gym"
+    if known_hits == 0:
+        distinct_words = set(normalized_words)
+        # Allow short phrases with common patterns like "go to X" where X is a known task word
+        if len(distinct_words) <= 3 and any(w in {"go", "to", "the"} for w in distinct_words):
+            # If there is at least one word of length >= 3, accept the phrase
+            if any(len(w) >= 3 for w in normalized_words):
+                return False
+        return True
+
+    # Default to treating as unclear only if no strong signals of clarity appear
+    return False
 
 
 def _build_messages(tasks: List[str], difficulty_hint: Optional[str]) -> List[Dict[str, str]]:
@@ -397,6 +530,24 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     if not tasks and not args.show_prompt:
         print("No tasks provided.", file=sys.stderr)
+        return 2
+
+    # Enforce a minimum length for each task to avoid low-information prompts
+    min_task_length = 3
+    invalid_tasks = [t for t in tasks if len(t.strip()) < min_task_length]
+    if invalid_tasks:
+        print(f"Each task must be at least {min_task_length} characters long.", file=sys.stderr)
+        for bad in invalid_tasks:
+            print(f"- Too short: '{bad}'", file=sys.stderr)
+        print("Please provide clearer input and try again.", file=sys.stderr)
+        return 2
+
+    unclear_tasks = [t for t in tasks if _looks_like_gibberish(t)]
+    if unclear_tasks:
+        print("Some tasks look unclear or like gibberish. Please clarify before generating a quest.", file=sys.stderr)
+        for bad in unclear_tasks:
+            print(f"- Needs clarification: '{bad}'", file=sys.stderr)
+        print("Provide simple, meaningful task descriptions and retry.", file=sys.stderr)
         return 2
 
     messages = _build_messages(tasks, args.difficulty)
