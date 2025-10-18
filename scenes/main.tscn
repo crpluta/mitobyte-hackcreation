@@ -1,0 +1,55 @@
+[gd_scene load_steps=7 format=3 uid="uid://c7yq1d2x3h8kl"]
+
+[ext_resource type="PackedScene" uid="uid://bvjxw8qn4qnpm" path="res://scenes/player.tscn" id="1_player"]
+[ext_resource type="Script" path="res://scripts/camera_follow.gd" id="2_camera"]
+[ext_resource type="PackedScene" uid="uid://dpmc8x3h5qw2k" path="res://scenes/deckard_cain.tscn" id="3_deckard"]
+[ext_resource type="PackedScene" uid="uid://bwq5r8x9k3nvm" path="res://scenes/ui.tscn" id="4_ui"]
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_ground"]
+size = Vector2(50, 50)
+
+[sub_resource type="BoxShape3D" id="BoxShape_ground"]
+size = Vector3(50, 0.2, 50)
+
+[node name="Main" type="Node3D"]
+
+[node name="Environment" type="Node3D" parent="."]
+
+[node name="Ground" type="StaticBody3D" parent="Environment"]
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Environment/Ground"]
+mesh = SubResource("PlaneMesh_ground")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Environment/Ground"]
+shape = SubResource("BoxShape_ground")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="Environment"]
+transform = Transform3D(0.866025, -0.433013, 0.25, 0, 0.5, 0.866025, -0.5, -0.75, 0.433013, 0, 10, 0)
+shadow_enabled = true
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.766044, 0.642788, 0, -0.642788, 0.766044, 0, 12, 15)
+fov = 50.0
+script = ExtResource("2_camera")
+target_path = NodePath("../Player")
+
+[node name="Player" parent="." instance=ExtResource("1_player")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
+
+[node name="NPCs" type="Node3D" parent="."]
+
+[node name="DeckardCain" parent="NPCs" instance=ExtResource("3_deckard")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 0, 5)
+
+[node name="Markers" type="Node3D" parent="."]
+
+[node name="DeckardCainSpot" type="Node3D" parent="Markers"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 0, 5)
+
+[node name="WorkerArea" type="Node3D" parent="Markers"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -8, 0, 0)
+
+[node name="ShopSpot" type="Node3D" parent="Markers"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 0, -8)
+
+[node name="UI" parent="." instance=ExtResource("4_ui")]
