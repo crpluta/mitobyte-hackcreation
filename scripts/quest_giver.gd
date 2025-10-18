@@ -44,7 +44,7 @@ const COLOR_WEEKLY_IN_PROGRESS = Color(1.0, 0.6, 0.2)    # Orange
 const COLOR_WEEKLY_COMPLETE = Color(1.0, 1.0, 0.4)       # Bright Yellow
 
 func _ready():
-	player = get_tree().get_first_node_in_group("player")
+	_find_local_player()
 
 	# Create unique material instance for this NPC (not shared!)
 	var new_material = StandardMaterial3D.new()
@@ -52,6 +52,20 @@ func _ready():
 	material = new_material
 
 	update_visual_state()
+
+func _find_local_player():
+	"""Find the local player (the one controlled by this client)"""
+	var players = get_tree().get_nodes_in_group("player")
+
+	for p in players:
+		if p.is_multiplayer_authority():
+			player = p
+			print("Quest giver found local player: ", p.name)
+			return
+
+	# Fallback to first player (solo mode)
+	if not players.is_empty():
+		player = players[0]
 
 func setup_quest(todo: Dictionary, id: String):
 	quest_data = todo
@@ -68,6 +82,10 @@ func _process(delta):
 				print("NPC reached quest location: ", quest_id)
 
 		State.AT_LOCATION:
+			# Re-find player if we lost the reference (multiplayer)
+			if not is_instance_valid(player):
+				_find_local_player()
+
 			# Check distance to player (only when at location)
 			if player:
 				var distance = global_position.distance_to(player.global_position)
@@ -127,12 +145,20 @@ func update_visual_state():
 			color_in_progress = COLOR_ONETIME_IN_PROGRESS
 			color_complete = COLOR_ONETIME_COMPLETE
 
+	# Check if locked by another player
+	var is_locked_by_other = TodoManager.is_quest_locked_by_other(quest_id)
+
 	# Update color and marker based on state
 	if is_turned_in:
 		# Quest already turned in - gray
 		material.albedo_color = Color(0.5, 0.5, 0.5)
 		marker_label.text = ""
 		marker_label.modulate = Color(0.5, 0.5, 0.5)
+	elif is_locked_by_other:
+		# Locked by another player - darker version of available color
+		material.albedo_color = color_available * 0.5  # Dimmed
+		marker_label.text = "X"
+		marker_label.modulate = Color(1.0, 0.5, 0.0)  # Orange
 	elif is_accepted and all_tasks_done:
 		# All tasks complete, ready to turn in
 		material.albedo_color = color_complete
@@ -157,6 +183,8 @@ func get_quest_status() -> String:
 			return "complete"  # All tasks done, ready to turn in
 		else:
 			return "in_progress"  # Still working on tasks
+	elif TodoManager.is_quest_locked_by_other(quest_id):
+		return "locked"  # Someone else has this quest
 	else:
 		return "available"
 
@@ -170,6 +198,9 @@ func get_interaction_prompt() -> String:
 				return "Press E to view quest"
 			"complete":
 				return "Press E to turn in quest"
+			"locked":
+				var holder = TodoManager.get_quest_lock_holder(quest_id)
+				return "%s is doing this quest" % holder
 			"turned_in":
 				return ""  # No interaction for completed quests
 	return ""

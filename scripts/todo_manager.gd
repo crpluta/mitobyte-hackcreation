@@ -20,6 +20,9 @@ var completed_quests: Array = []
 # Quest type tracking (game-side only, not in JSON)
 var quest_types: Dictionary = {}  # quest_id -> "daily" or "one_time"
 
+# Multiplayer: Track which player has accepted which quest
+var quest_locks: Dictionary = {}  # quest_id -> {peer_id: int, player_name: String}
+
 # Player stats
 var player_xp: int = 0
 var player_gold: int = 0
@@ -37,8 +40,37 @@ func _ready():
 	# Load sample data initially
 	load_todos_from_file()
 
+	# Connect to NetworkManager for multiplayer events
+	if NetworkManager:
+		NetworkManager.player_disconnected.connect(_on_player_disconnected)
+
 	# TODO: Watch for todos_onetime.json and todos_daily.json changes
 	# For now, just load from sample-todos.json
+
+# Handle player disconnection - release their quests
+func _on_player_disconnected(peer_id: int):
+	print("Releasing quests from disconnected player: ", peer_id)
+
+	# Find and release all quests locked by this player
+	var quests_to_unlock = []
+	for quest_id in quest_locks.keys():
+		var lock_info = quest_locks[quest_id]
+		if lock_info.get("peer_id", -1) == peer_id:
+			quests_to_unlock.append(quest_id)
+
+	for quest_id in quests_to_unlock:
+		quest_locks.erase(quest_id)
+		print("Released quest: ", quest_id)
+
+		# Broadcast unlock to all clients (if we're the server)
+		if multiplayer.is_server():
+			_sync_quest_unlock.rpc(quest_id)
+
+# RPC: Unlock a quest (server -> all)
+@rpc("authority", "reliable")
+func _sync_quest_unlock(quest_id: String):
+	quest_locks.erase(quest_id)
+	print("Quest unlocked: ", quest_id)
 
 func load_game_config():
 	"""Load game configuration from game_config.json"""
@@ -144,6 +176,22 @@ func import_quests_from_json(json_string: String, fallback_quest_type: String = 
 	Fallback quest_type only used if frequency is missing
 	"""
 
+	# In multiplayer, sync to all clients
+	if multiplayer.has_multiplayer_peer():
+		# Broadcast to all clients (including self)
+		_sync_import_quests.rpc(json_string, fallback_quest_type)
+		return true
+
+	# Solo mode - import directly
+	return _import_quests_internal(json_string, fallback_quest_type)
+
+@rpc("any_peer", "call_local", "reliable")
+func _sync_import_quests(json_string: String, fallback_quest_type: String):
+	"""RPC function to sync quest imports across all clients"""
+	_import_quests_internal(json_string, fallback_quest_type)
+
+func _import_quests_internal(json_string: String, fallback_quest_type: String = "one_time") -> bool:
+	"""Internal function that actually imports quests"""
 	var json = JSON.new()
 	var parse_result = json.parse(json_string)
 
@@ -234,7 +282,7 @@ func import_quests_from_json(json_string: String, fallback_quest_type: String = 
 			quest_types[quest_id] = quest_type
 			print("Imported new quest: ", quest_id, " as ", quest_type)
 
-	print("Imported %d quests" % imported_quests.size())
+	print("Imported %d quests (multiplayer: %s)" % [imported_quests.size(), multiplayer.has_multiplayer_peer()])
 	todos_loaded.emit()
 	return true
 
@@ -289,6 +337,69 @@ func are_all_tasks_completed(quest_id: String) -> bool:
 	return true
 
 func accept_quest(quest_id: String) -> bool:
+	# In multiplayer, always go through server validation
+	if multiplayer.has_multiplayer_peer():
+		var my_peer_id = multiplayer.get_unique_id()
+		var my_name = NetworkManager.get_player_name(my_peer_id)
+
+		# Send request to server (works for both server and client)
+		_request_quest_accept.rpc_id(1, quest_id, my_peer_id, my_name)
+		return true  # Optimistic return, actual acceptance happens via RPC
+	else:
+		# Solo mode - accept directly
+		return _accept_quest_internal(quest_id, 1, "Player")
+
+# RPC: Request to accept a quest (any peer -> server)
+@rpc("any_peer", "reliable")
+func _request_quest_accept(quest_id: String, peer_id: int, player_name: String):
+	if not multiplayer.is_server():
+		return
+
+	# Server validates the request
+	if _can_accept_quest(quest_id, peer_id):
+		# Broadcast acceptance to all clients (including sender via call_local)
+		_sync_quest_accept.rpc(quest_id, peer_id, player_name)
+	else:
+		# Quest is already locked, notify the requester
+		print("Quest acceptance rejected for %s: already locked" % player_name)
+
+# RPC: Server broadcasts quest acceptance to all clients (server -> all)
+@rpc("authority", "call_local", "reliable")
+func _sync_quest_accept(quest_id: String, peer_id: int, player_name: String):
+	_accept_quest_internal(quest_id, peer_id, player_name)
+
+# Check if a quest can be accepted (for server validation)
+func _can_accept_quest(quest_id: String, peer_id: int) -> bool:
+	# Check if already locked by someone else
+	if quest_locks.has(quest_id):
+		var lock_peer = quest_locks[quest_id].get("peer_id", -1)
+		if lock_peer != peer_id:
+			return false
+
+	# Check if quest exists
+	var quest_exists = false
+	for q in all_todos:
+		if q.get("id", "") == quest_id:
+			quest_exists = true
+			break
+
+	if not quest_exists:
+		return false
+
+	# Check if already accepted
+	if quest_id in accepted_quests:
+		return false
+
+	return true
+
+# Internal function that actually accepts a quest
+func _accept_quest_internal(quest_id: String, peer_id: int, player_name: String) -> bool:
+	# Check if quest is locked by another player
+	if quest_locks.has(quest_id) and quest_locks[quest_id].get("peer_id", -1) != peer_id:
+		var other_player = quest_locks[quest_id].get("player_name", "Another player")
+		print("Quest already taken by: ", other_player)
+		return false
+
 	# Find the quest
 	var quest = null
 	for q in all_todos:
@@ -304,12 +415,81 @@ func accept_quest(quest_id: String) -> bool:
 		print("Quest already accepted: ", quest_id)
 		return false
 
-	accepted_quests[quest_id] = quest
-	# Initialize empty completed tasks array for this quest
-	completed_tasks[quest_id] = []
+	# Update quest lock (synced to all clients)
+	quest_locks[quest_id] = {
+		"peer_id": peer_id,
+		"player_name": player_name
+	}
+
+	# Only add to accepted quests if this is OUR quest
+	var my_peer_id = multiplayer.get_unique_id() if multiplayer.has_multiplayer_peer() else 1
+	if peer_id == my_peer_id:
+		# This is our quest - add it to accepted quests
+		accepted_quests[quest_id] = quest
+		completed_tasks[quest_id] = []
+		print("Quest accepted: %s" % quest.get("title", "Unknown"))
+	else:
+		# Someone else's quest - just update the lock
+		print("Quest locked by %s: %s" % [player_name, quest.get("title", "Unknown")])
+
+	# Emit signal on ALL clients so NPCs update their visual state
 	quest_accepted.emit(quest_id)
-	print("Quest accepted: ", quest.get("title", "Unknown"))
+
 	return true
+
+# Check if a quest is locked by another player
+func is_quest_locked_by_other(quest_id: String) -> bool:
+	if not multiplayer.has_multiplayer_peer():
+		return false
+
+	if not quest_locks.has(quest_id):
+		return false
+
+	var lock_info = quest_locks[quest_id]
+	var my_peer_id = multiplayer.get_unique_id()
+	return lock_info.get("peer_id", -1) != my_peer_id
+
+# Get who has locked a quest (returns player name or empty string)
+func get_quest_lock_holder(quest_id: String) -> String:
+	if quest_locks.has(quest_id):
+		return quest_locks[quest_id].get("player_name", "Unknown")
+	return ""
+
+# RPC: Client requests to lock a quest (client -> server)
+@rpc("any_peer", "reliable")
+func _request_quest_lock(quest_id: String, peer_id: int, player_name: String):
+	if not multiplayer.is_server():
+		return
+
+	# Check if quest is already locked
+	if quest_locks.has(quest_id):
+		# Quest already locked, notify requester
+		_quest_lock_rejected.rpc_id(peer_id, quest_id, quest_locks[quest_id].get("player_name", "Unknown"))
+		return
+
+	# Lock the quest
+	quest_locks[quest_id] = {
+		"peer_id": peer_id,
+		"player_name": player_name
+	}
+
+	# Broadcast to all clients
+	_sync_quest_lock.rpc(quest_id, peer_id, player_name)
+
+# RPC: Sync quest lock to all clients (server -> all)
+@rpc("authority", "reliable")
+func _sync_quest_lock(quest_id: String, peer_id: int, player_name: String):
+	quest_locks[quest_id] = {
+		"peer_id": peer_id,
+		"player_name": player_name
+	}
+	print("Quest locked by ", player_name, ": ", quest_id)
+
+# RPC: Quest lock was rejected (server -> client)
+@rpc("authority", "reliable")
+func _quest_lock_rejected(quest_id: String, taken_by: String):
+	print("Quest ", quest_id, " already taken by: ", taken_by)
+	# Could emit a signal here to show UI message
 
 func complete_task(quest_id: String, task_id: String) -> bool:
 	"""Mark a task as completed"""
@@ -368,29 +548,84 @@ func complete_quest(quest_id: String) -> bool:
 		return false
 
 	var quest = accepted_quests[quest_id]
-
-	# Award rewards (new format)
 	var rewards = quest.get("rewards", {})
-	var xp = rewards.get("xp", 0)
-	var coins = rewards.get("coins", 0)
-	player_xp += xp
-	player_gold += coins
 
-	# Check for level up (configurable XP per level)
-	var xp_per_level = game_config.get("progression", {}).get("xp_per_level", 500)
-	var new_level = 1 + int(player_xp / xp_per_level)
-	if new_level > player_level:
-		player_level = new_level
-		print("LEVEL UP! Now level ", player_level)
+	# In multiplayer, sync completion to all clients
+	if multiplayer.has_multiplayer_peer():
+		var my_peer_id = multiplayer.get_unique_id()
+		_request_quest_complete.rpc_id(1, quest_id, my_peer_id)
+	else:
+		# Solo mode - complete directly
+		_complete_quest_internal(quest_id, 1)
 
-	# Move to completed
-	completed_quests.append(quest_id)
-	accepted_quests.erase(quest_id)
-	completed_tasks.erase(quest_id)
-
-	quest_completed.emit(quest_id)
-	print("Quest completed: ", quest.get("title", "Unknown"), " (+%d XP, +%d Coins)" % [xp, coins])
 	return true
+
+# RPC: Request to complete a quest (any peer -> server)
+@rpc("any_peer", "reliable")
+func _request_quest_complete(quest_id: String, peer_id: int):
+	if not multiplayer.is_server():
+		return
+
+	# Server broadcasts completion to all clients
+	_sync_quest_complete.rpc(quest_id, peer_id)
+
+# RPC: Server broadcasts quest completion to all clients (server -> all)
+@rpc("authority", "call_local", "reliable")
+func _sync_quest_complete(quest_id: String, peer_id: int):
+	_complete_quest_internal(quest_id, peer_id)
+
+# Internal function that actually completes a quest
+func _complete_quest_internal(quest_id: String, peer_id: int):
+	var my_peer_id = multiplayer.get_unique_id() if multiplayer.has_multiplayer_peer() else 1
+	var is_my_quest = (peer_id == my_peer_id)
+
+	# Find quest data
+	var quest = null
+	if is_my_quest and quest_id in accepted_quests:
+		quest = accepted_quests[quest_id]
+	else:
+		# Find in all_todos for other players' quests
+		for q in all_todos:
+			if q.get("id", "") == quest_id:
+				quest = q
+				break
+
+	if not quest:
+		print("Quest not found for completion: ", quest_id)
+		return
+
+	# Award rewards ONLY to the owner
+	if is_my_quest:
+		var rewards = quest.get("rewards", {})
+		var xp = rewards.get("xp", 0)
+		var coins = rewards.get("coins", 0)
+		player_xp += xp
+		player_gold += coins
+
+		# Check for level up (configurable XP per level)
+		var xp_per_level = game_config.get("progression", {}).get("xp_per_level", 500)
+		var new_level = 1 + int(player_xp / xp_per_level)
+		if new_level > player_level:
+			player_level = new_level
+			print("LEVEL UP! Now level ", player_level)
+
+		# Remove from accepted quests
+		accepted_quests.erase(quest_id)
+		completed_tasks.erase(quest_id)
+		print("Quest completed: ", quest.get("title", "Unknown"), " (+%d XP, +%d Coins)" % [xp, coins])
+	else:
+		print("Quest completed by another player: ", quest.get("title", "Unknown"))
+
+	# Mark as completed for ALL clients (so NPCs despawn for everyone)
+	if quest_id not in completed_quests:
+		completed_quests.append(quest_id)
+
+	# Unlock quest (remove from locks)
+	if quest_locks.has(quest_id):
+		quest_locks.erase(quest_id)
+
+	# Emit signal so NPCs can react
+	quest_completed.emit(quest_id)
 
 func get_quest_type(quest_id: String) -> String:
 	"""Get quest type (daily or one_time)"""

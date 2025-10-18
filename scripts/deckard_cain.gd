@@ -15,12 +15,28 @@ signal interaction_triggered
 
 func _ready():
 	print("Deckard Cain initialized")
-	# Find player
-	player = get_tree().get_first_node_in_group("player")
-	if not player:
-		print("Warning: Player not found in 'player' group")
+	# Find local player
+	_find_local_player()
+
+func _find_local_player():
+	"""Find the local player (the one controlled by this client)"""
+	var players = get_tree().get_nodes_in_group("player")
+
+	for p in players:
+		if p.is_multiplayer_authority():
+			player = p
+			print("Deckard Cain found local player: ", p.name)
+			return
+
+	# Fallback to first player (solo mode)
+	if not players.is_empty():
+		player = players[0]
 
 func _process(_delta):
+	# Re-find player if we lost the reference (multiplayer)
+	if not is_instance_valid(player):
+		_find_local_player()
+
 	if not player:
 		return
 

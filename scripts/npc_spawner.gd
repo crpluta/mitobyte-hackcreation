@@ -157,6 +157,11 @@ func get_scattered_position(priority: String) -> Vector3:
 	var min_dist = range_data["min"]
 	var max_dist = range_data["max"]
 
+	# Use a deterministic seed based on existing NPC count for consistency across clients
+	# This ensures all clients generate the same "random" positions
+	var seed_value = spawned_npcs.size() + 12345
+	seed(seed_value)
+
 	# Try to find a valid position (avoid overlap)
 	var max_attempts = 20
 	for attempt in range(max_attempts):
@@ -187,6 +192,8 @@ func get_scattered_position(priority: String) -> Vector3:
 			return candidate_pos
 
 	# Fallback: return position anyway if we couldn't find a perfect spot
+	# Re-seed for final attempt
+	seed(spawned_npcs.size() + 12345)
 	var distance = randf_range(min_dist, max_dist)
 	var angle = randf() * TAU
 	return Vector3(

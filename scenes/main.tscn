@@ -1,5 +1,6 @@
-[gd_scene load_steps=10 format=3 uid="uid://c7yq1d2x3h8kl"]
+[gd_scene load_steps=11 format=3 uid="uid://c7yq1d2x3h8kl"]
 
+[ext_resource type="Script" path="res://scripts/main_multiplayer.gd" id="1_main"]
 [ext_resource type="PackedScene" uid="uid://bvjxw8qn4qnpm" path="res://scenes/player.tscn" id="1_player"]
 [ext_resource type="Script" path="res://scripts/camera_follow.gd" id="2_camera"]
 [ext_resource type="PackedScene" uid="uid://dpmc8x3h5qw2k" path="res://scenes/deckard_cain.tscn" id="3_deckard"]
@@ -16,6 +17,7 @@ size = Vector2(50, 50)
 size = Vector3(50, 0.2, 50)
 
 [node name="Main" type="Node3D"]
+script = ExtResource("1_main")
 
 [node name="Environment" type="Node3D" parent="."]
 

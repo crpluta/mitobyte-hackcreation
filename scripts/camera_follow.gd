@@ -17,8 +17,28 @@ func _ready():
 	if not target:
 		print("Camera: No target found!")
 
+func set_target(new_target: Node3D):
+	"""Set the camera target (used by multiplayer to set local player)"""
+	target = new_target
+	if target:
+		print("Camera target set to: ", target.name)
+
 func _process(delta):
+	# Re-check for local player if we don't have a target (multiplayer)
+	if not is_instance_valid(target):
+		_find_local_player()
+
 	if target:
 		# Smoothly follow player position
 		var target_position = target.global_position + offset
 		global_position = global_position.lerp(target_position, smooth_speed * delta)
+
+func _find_local_player():
+	"""Find the local player in multiplayer"""
+	var players = get_tree().get_nodes_in_group("player")
+
+	for p in players:
+		if p.is_multiplayer_authority():
+			target = p
+			print("Camera found local player: ", p.name)
+			return

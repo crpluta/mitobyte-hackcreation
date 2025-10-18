@@ -97,8 +97,8 @@ func _ready():
 	# Initial population
 	_update_active_quests_hud("")
 
-	# Get player reference
-	player = get_tree().get_first_node_in_group("player")
+	# Get player reference - find the local player
+	_find_local_player()
 
 	# Connect to quest completion for stat updates
 	TodoManager.quest_completed.connect(func(_qid): _update_player_stats())
@@ -106,8 +106,31 @@ func _ready():
 	# Initial stats update
 	_update_player_stats()
 
+func _find_local_player():
+	"""Find the local player (the one controlled by this client)"""
+	# In solo mode, just get the first player
+	var players = get_tree().get_nodes_in_group("player")
+
+	if players.is_empty():
+		player = null
+		return
+
+	# In multiplayer, find the player we have authority over
+	for p in players:
+		if p.is_multiplayer_authority():
+			player = p
+			print("Found local player for portrait: ", p.name)
+			return
+
+	# Fallback to first player (solo mode)
+	player = players[0]
+
 func _process(_delta):
-	# Update portrait camera to follow player (front-facing view)
+	# Re-find player if we lost the reference (can happen in multiplayer)
+	if not is_instance_valid(player):
+		_find_local_player()
+
+	# Update portrait camera to follow local player only
 	if player and portrait_camera:
 		# Position camera in front of player, slightly above
 		portrait_camera.global_position = player.global_position + Vector3(0, 1.5, 2.5)
@@ -232,7 +255,9 @@ func _run_llm_in_thread(data: Dictionary):
 	print("Input file: ", data.input_path)
 
 	var output = []
-	var exit_code = OS.execute("python", [data.script_path, "--input", data.input_path], output, true, true)  # Capture stderr too
+	# OS.execute params: path, args, output, read_stderr, open_console
+	# Set open_console to false to hide the Python console window
+	var exit_code = OS.execute("python", [data.script_path, "--input", data.input_path], output, true, false)
 
 	if exit_code != 0:
 		print("ERROR: Python script failed with exit code: ", exit_code)
@@ -362,6 +387,10 @@ func show_quest_dialog(npc: Node3D, todo: Dictionary, quest_id: String):
 		"complete":
 			quest_action_button.text = "Turn In Quest"
 			quest_action_button.disabled = false
+		"locked":
+			var holder = TodoManager.get_quest_lock_holder(quest_id)
+			quest_action_button.text = "Taken by %s" % holder
+			quest_action_button.disabled = true
 		"turned_in":
 			quest_action_button.text = "Already Completed"
 			quest_action_button.disabled = true

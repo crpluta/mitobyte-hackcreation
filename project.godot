@@ -20,6 +20,7 @@ config/icon="res://icon.svg"
 
 DeploymentManager="*res://scripts/deployment_manager.gd"
 TodoManager="*res://scripts/todo_manager.gd"
+NetworkManager="*res://scripts/network_manager.gd"
 
 [display]
 
