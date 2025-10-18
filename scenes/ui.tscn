@@ -1,6 +1,13 @@
-[gd_scene load_steps=2 format=3 uid="uid://bwq5r8x9k3nvm"]
+[gd_scene load_steps=3 format=3 uid="uid://bwq5r8x9k3nvm"]
 
 [ext_resource type="Script" path="res://scripts/ui_manager.gd" id="1_ui"]
+
+[sub_resource type="Environment" id="PortraitEnvironment"]
+background_mode = 1
+background_color = Color(0.15, 0.15, 0.15, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.8, 0.8, 0.8, 1)
+ambient_light_energy = 1.0
 
 [node name="UI" type="CanvasLayer" groups=["ui"]]
 script = ExtResource("1_ui")
@@ -28,6 +35,7 @@ vertical_alignment = 1
 
 [node name="InputDialog" type="Panel" parent="."]
 visible = false
+z_index = 100
 anchors_preset = 8
 anchor_left = 0.5
 anchor_top = 0.5
@@ -107,6 +115,7 @@ horizontal_alignment = 1
 
 [node name="QuestDialog" type="Panel" parent="."]
 visible = false
+z_index = 100
 anchors_preset = 8
 anchor_left = 0.5
 anchor_top = 0.5
@@ -173,13 +182,14 @@ horizontal_alignment = 1
 
 [node name="QuestLog" type="Panel" parent="."]
 visible = false
+z_index = 100
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = 50.0
-offset_top = 50.0
-offset_right = -50.0
-offset_bottom = -50.0
+offset_left = 230.0
+offset_top = 80.0
+offset_right = -340.0
+offset_bottom = -80.0
 grow_horizontal = 2
 grow_vertical = 2
 
@@ -224,13 +234,14 @@ horizontal_alignment = 1
 
 [node name="ToastNotification" type="Panel" parent="."]
 visible = false
+z_index = 50
 anchors_preset = 1
 anchor_left = 1.0
 anchor_right = 1.0
 offset_left = -280.0
-offset_top = 20.0
+offset_top = 150.0
 offset_right = -20.0
-offset_bottom = 120.0
+offset_bottom = 280.0
 grow_horizontal = 0
 
 [node name="Container" type="VBoxContainer" parent="ToastNotification"]
@@ -279,6 +290,7 @@ text = "OK"
 
 [node name="LevelUpPanel" type="Panel" parent="."]
 visible = false
+z_index = 100
 anchors_preset = 8
 anchor_left = 0.5
 anchor_top = 0.5
@@ -350,3 +362,146 @@ size_flags_vertical = 3
 layout_mode = 2
 theme_override_font_sizes/font_size = 24
 text = "Continue"
+
+[node name="ActiveQuestsHUD" type="Panel" parent="."]
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -320.0
+offset_top = 10.0
+offset_right = -20.0
+offset_bottom = 450.0
+grow_horizontal = 0
+
+[node name="Container" type="VBoxContainer" parent="ActiveQuestsHUD"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 10.0
+offset_top = 10.0
+offset_right = -10.0
+offset_bottom = -10.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Title" type="Label" parent="ActiveQuestsHUD/Container"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+theme_override_colors/font_color = Color(1, 0.8, 0.2, 1)
+text = "Active Quests"
+horizontal_alignment = 1
+
+[node name="Separator" type="HSeparator" parent="ActiveQuestsHUD/Container"]
+layout_mode = 2
+
+[node name="ScrollContainer" type="ScrollContainer" parent="ActiveQuestsHUD/Container"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="QuestsList" type="VBoxContainer" parent="ActiveQuestsHUD/Container/ScrollContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="PlayerPortrait" type="Panel" parent="."]
+anchors_preset = 0
+offset_left = 10.0
+offset_top = 10.0
+offset_right = 210.0
+offset_bottom = 210.0
+
+[node name="Container" type="VBoxContainer" parent="PlayerPortrait"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 5.0
+offset_top = 5.0
+offset_right = -5.0
+offset_bottom = -5.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="PortraitFrame" type="SubViewportContainer" parent="PlayerPortrait/Container"]
+custom_minimum_size = Vector2(0, 140)
+layout_mode = 2
+stretch = true
+
+[node name="SubViewport" type="SubViewport" parent="PlayerPortrait/Container/PortraitFrame"]
+size = Vector2i(190, 140)
+render_target_update_mode = 4
+transparent_bg = true
+
+[node name="PortraitCamera" type="Camera3D" parent="PlayerPortrait/Container/PortraitFrame/SubViewport"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, 2.5)
+cull_mask = 2
+environment = SubResource("PortraitEnvironment")
+
+[node name="PortraitLight" type="DirectionalLight3D" parent="PlayerPortrait/Container/PortraitFrame/SubViewport"]
+transform = Transform3D(0.866025, -0.433013, 0.25, 0, 0.5, 0.866025, -0.5, -0.75, 0.433013, 0, 5, 5)
+light_energy = 1.5
+light_cull_mask = 2
+
+[node name="LevelLabel" type="Label" parent="PlayerPortrait/Container"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 24
+theme_override_colors/font_color = Color(1, 0.8, 0.2, 1)
+text = "Level 1"
+horizontal_alignment = 1
+
+[node name="GoldLabel" type="Label" parent="PlayerPortrait/Container"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+theme_override_colors/font_color = Color(1, 0.84, 0, 1)
+text = "0 Gold"
+horizontal_alignment = 1
+
+[node name="HatButton" type="Button" parent="PlayerPortrait/Container"]
+layout_mode = 2
+text = "Toggle Hat (Test)"
+
+[node name="XPBar" type="Panel" parent="."]
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -400.0
+offset_top = -30.0
+offset_right = 400.0
+offset_bottom = -10.0
+grow_horizontal = 2
+grow_vertical = 0
+
+[node name="ProgressBar" type="ProgressBar" parent="XPBar"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 5.0
+offset_top = 5.0
+offset_right = -5.0
+offset_bottom = -5.0
+grow_horizontal = 2
+grow_vertical = 2
+show_percentage = false
+
+[node name="XPLabel" type="Label" parent="XPBar"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -100.0
+offset_top = -10.0
+offset_right = 100.0
+offset_bottom = 10.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 2
+text = "0 / 500 XP"
+horizontal_alignment = 1
+vertical_alignment = 1

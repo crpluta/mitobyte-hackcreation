@@ -1,10 +1,22 @@
-[gd_scene load_steps=3 format=3 uid="uid://bvjxw8qn4qnpm"]
+[gd_scene load_steps=6 format=3 uid="uid://bvjxw8qn4qnpm"]
 
 [ext_resource type="Script" path="res://scripts/player.gd" id="1_player"]
 
+[sub_resource type="StandardMaterial3D" id="PlayerMaterial"]
+albedo_color = Color(1, 1, 1, 1)
+
 [sub_resource type="CapsuleMesh" id="CapsuleMesh_player"]
+material = SubResource("PlayerMaterial")
 radius = 0.5
 height = 2.0
+
+[sub_resource type="CylinderMesh" id="HatMesh"]
+top_radius = 0.6
+bottom_radius = 0.3
+height = 0.5
+
+[sub_resource type="StandardMaterial3D" id="HatMaterial"]
+albedo_color = Color(0.8, 0.2, 0.2, 1)
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape_player"]
 radius = 0.5
@@ -15,7 +27,15 @@ script = ExtResource("1_player")
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
+layers = 3
 mesh = SubResource("CapsuleMesh_player")
+
+[node name="Hat" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.2, 0)
+visible = false
+layers = 3
+mesh = SubResource("HatMesh")
+surface_material_override/0 = SubResource("HatMaterial")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)

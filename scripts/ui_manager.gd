@@ -28,6 +28,16 @@ extends CanvasLayer
 @onready var levelup_rewards = $LevelUpPanel/Container/Rewards
 @onready var levelup_dismiss_button = $LevelUpPanel/Container/DismissButton
 
+@onready var active_quests_hud = $ActiveQuestsHUD
+@onready var active_quests_list = $ActiveQuestsHUD/Container/ScrollContainer/QuestsList
+
+@onready var portrait_camera = $PlayerPortrait/Container/PortraitFrame/SubViewport/PortraitCamera
+@onready var level_label = $PlayerPortrait/Container/LevelLabel
+@onready var gold_label = $PlayerPortrait/Container/GoldLabel
+@onready var hat_button = $PlayerPortrait/Container/HatButton
+@onready var xp_progress = $XPBar/ProgressBar
+@onready var xp_label = $XPBar/XPLabel
+
 # Current quest interaction
 var current_quest_npc: Node3D = null
 var current_quest_id: String = ""
@@ -40,6 +50,9 @@ var current_input_quest_type: String = "one_time"  # default
 var llm_process_id: int = -1
 var llm_output_file: String = ""
 var llm_quest_type: String = ""
+
+# Player reference for portrait camera
+var player: Node3D = null
 
 func _ready():
 	print("UI Manager initialized")
@@ -72,6 +85,34 @@ func _ready():
 	# Connect notification dismiss buttons
 	toast_dismiss_button.pressed.connect(_on_toast_dismiss)
 	levelup_dismiss_button.pressed.connect(_on_levelup_dismiss)
+
+	# Connect hat button
+	hat_button.pressed.connect(_on_hat_button_pressed)
+
+	# Connect to TodoManager for active quests HUD
+	TodoManager.quest_accepted.connect(_update_active_quests_hud)
+	TodoManager.task_completed.connect(func(_qid, _tid): _update_active_quests_hud(""))
+	TodoManager.quest_completed.connect(_update_active_quests_hud)
+
+	# Initial population
+	_update_active_quests_hud("")
+
+	# Get player reference
+	player = get_tree().get_first_node_in_group("player")
+
+	# Connect to quest completion for stat updates
+	TodoManager.quest_completed.connect(func(_qid): _update_player_stats())
+
+	# Initial stats update
+	_update_player_stats()
+
+func _process(_delta):
+	# Update portrait camera to follow player (front-facing view)
+	if player and portrait_camera:
+		# Position camera in front of player, slightly above
+		portrait_camera.global_position = player.global_position + Vector3(0, 1.5, 2.5)
+		# Look at player's head area
+		portrait_camera.look_at(player.global_position + Vector3(0, 1.3, 0), Vector3.UP)
 
 func hide_all():
 	interaction_prompt.hide()
@@ -385,6 +426,16 @@ func populate_quest_log():
 		info_label.add_theme_font_size_override("font_size", 14)
 		quest_vbox.add_child(info_label)
 
+		# Description
+		var desc_label = RichTextLabel.new()
+		desc_label.bbcode_enabled = true
+		desc_label.text = "[i]%s[/i]" % quest.get("description", "")
+		desc_label.add_theme_font_size_override("normal_font_size", 13)
+		desc_label.add_theme_color_override("default_color", Color(0.8, 0.8, 0.8))
+		desc_label.fit_content = true
+		desc_label.scroll_active = false
+		quest_vbox.add_child(desc_label)
+
 		# Spacer
 		var spacer = Control.new()
 		spacer.custom_minimum_size = Vector2(0, 10)
@@ -472,3 +523,91 @@ func _on_levelup_dismiss():
 	var tween = create_tween()
 	tween.tween_property(levelup_panel, "modulate:a", 0.0, 0.2)
 	tween.tween_callback(levelup_panel.hide)
+
+func _update_active_quests_hud(_quest_id: String):
+	"""Update the active quests HUD with current accepted quests"""
+	# Clear existing content
+	for child in active_quests_list.get_children():
+		child.queue_free()
+
+	var accepted_quests = TodoManager.get_accepted_quests()
+
+	if accepted_quests.is_empty():
+		# Show "No active quests" message
+		var empty_label = Label.new()
+		empty_label.text = "No active quests"
+		empty_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		empty_label.add_theme_color_override("font_color", Color(0.6, 0.6, 0.6))
+		active_quests_list.add_child(empty_label)
+		return
+
+	# Add each active quest
+	for quest in accepted_quests:
+		var quest_id = quest.get("id", "")
+		var quest_title = quest.get("title", "Unknown Quest")
+		var tasks = quest.get("tasks", [])
+
+		# Quest title
+		var title_label = Label.new()
+		title_label.text = "[b]%s[/b]" % quest_title
+		title_label.add_theme_font_size_override("font_size", 16)
+
+		# Color based on quest type
+		var quest_type = TodoManager.get_quest_type(quest_id)
+		if quest_type == "daily":
+			title_label.add_theme_color_override("font_color", Color(0.4, 0.7, 1.0))
+		else:
+			title_label.add_theme_color_override("font_color", Color(0.3, 1.0, 0.3))
+
+		active_quests_list.add_child(title_label)
+
+		# Tasks
+		for task in tasks:
+			var task_id = task.get("id", "")
+			var task_text = task.get("text", "")
+			var is_completed = TodoManager.is_task_completed(quest_id, task_id)
+
+			var task_label = RichTextLabel.new()
+			task_label.bbcode_enabled = true
+			task_label.fit_content = true
+			task_label.scroll_active = false
+
+			if is_completed:
+				# Strikethrough for completed tasks
+				task_label.text = "[s][color=gray]• %s[/color][/s]" % task_text
+			else:
+				# Normal for incomplete tasks
+				task_label.text = "• %s" % task_text
+
+			task_label.add_theme_font_size_override("normal_font_size", 14)
+			active_quests_list.add_child(task_label)
+
+		# Spacer between quests
+		var spacer = Control.new()
+		spacer.custom_minimum_size = Vector2(0, 10)
+		active_quests_list.add_child(spacer)
+
+func _update_player_stats():
+	"""Update player stats display (level, gold, XP bar)"""
+	var stats = TodoManager.get_player_stats()
+
+	# Update level
+	level_label.text = "Level %d" % stats.level
+
+	# Update gold
+	gold_label.text = "%d Gold" % stats.gold
+
+	# Update XP bar
+	var current_xp = stats.xp % 500  # XP within current level
+	var xp_for_next_level = 500
+	xp_progress.max_value = xp_for_next_level
+	xp_progress.value = current_xp
+	xp_label.text = "%d / %d XP" % [current_xp, xp_for_next_level]
+
+func _on_hat_button_pressed():
+	"""Toggle player hat visibility for testing cosmetics in portrait"""
+	if player:
+		var hat = player.get_node_or_null("Hat")
+		if hat:
+			hat.visible = not hat.visible
+			print("Hat toggled: ", "visible" if hat.visible else "hidden")
