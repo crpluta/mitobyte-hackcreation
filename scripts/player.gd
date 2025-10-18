@@ -81,3 +81,25 @@ func _physics_process(delta):
 
 	# Force Y position to stay fixed (prevent any drift)
 	position.y = FIXED_Y_POSITION
+
+# RPC function to equip a cosmetic (synced across all clients)
+@rpc("any_peer", "call_local", "reliable")
+func equip_cosmetic(cosmetic_name: String):
+	"""Equip a cosmetic item on this player (called via RPC)"""
+	var cosmetic = get_node_or_null(cosmetic_name)
+	if not cosmetic:
+		print("Cosmetic not found: ", cosmetic_name)
+		return
+
+	# Hide all other hats if equipping a hat
+	if cosmetic_name in ["Hat", "WizardHat"]:
+		var hat1 = get_node_or_null("Hat")
+		var hat2 = get_node_or_null("WizardHat")
+		if hat1:
+			hat1.visible = false
+		if hat2:
+			hat2.visible = false
+
+	# Show the equipped cosmetic
+	cosmetic.visible = true
+	print("Equipped cosmetic on %s: %s" % [player_name, cosmetic_name])

@@ -25,7 +25,7 @@ var quest_locks: Dictionary = {}  # quest_id -> {peer_id: int, player_name: Stri
 
 # Player stats
 var player_xp: int = 0
-var player_gold: int = 0
+var player_gold: int = 200  # Starting gold
 var player_level: int = 1
 
 func _ready():
@@ -688,7 +688,7 @@ func reset_game_state():
 
 	# Reset player stats
 	player_xp = 0
-	player_gold = 0
+	player_gold = 200  # Starting gold
 	player_level = 1
 
 	print("Game state reset complete")

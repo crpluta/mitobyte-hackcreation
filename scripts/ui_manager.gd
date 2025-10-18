@@ -767,22 +767,10 @@ func _purchase_item(item: Dictionary):
 	TodoManager.player_gold -= price
 	print("Purchased %s for %d gold" % [item.name, price])
 
-	# Equip cosmetic
+	# Equip cosmetic via RPC (syncs to all clients)
 	if player:
-		var cosmetic = player.get_node_or_null(cosmetic_name)
-		if cosmetic:
-			# Hide all other hats if buying a hat
-			if cosmetic_name in ["Hat", "WizardHat"]:
-				var hat1 = player.get_node_or_null("Hat")
-				var hat2 = player.get_node_or_null("WizardHat")
-				if hat1:
-					hat1.visible = false
-				if hat2:
-					hat2.visible = false
-
-			# Show purchased item
-			cosmetic.visible = true
-			print("Equipped: ", item.name)
+		player.equip_cosmetic.rpc(cosmetic_name)
+		print("Equipped: ", item.name)
 
 	# Update shop display
 	populate_shop()
