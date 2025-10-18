@@ -39,6 +39,7 @@ extends CanvasLayer
 @onready var gold_label = $PlayerPortrait/Container/GoldLabel
 @onready var xp_progress = $XPBar/ProgressBar
 @onready var xp_label = $XPBar/XPLabel
+@onready var xp_glow = $XPBar/GlowEffect
 
 # Current quest interaction
 var current_quest_npc: Node3D = null
@@ -409,8 +410,9 @@ func _on_quest_action_pressed():
 			get_tree().paused = false
 			print("Quest accepted: ", current_quest_data.get("title", ""))
 		"complete":
-			# Turn in the quest - capture level before completion
+			# Turn in the quest - capture state before completion
 			var old_level = TodoManager.player_level
+			var old_xp = TodoManager.player_xp
 			var rewards = current_quest_data.get("rewards", {})
 			var xp = rewards.get("xp", 0)
 			var coins = rewards.get("coins", 0)
@@ -420,8 +422,12 @@ func _on_quest_action_pressed():
 			quest_dialog.hide()
 			get_tree().paused = false  # Unpause immediately
 
-			# Check if leveled up
+			# Animate XP gain
 			var new_level = TodoManager.player_level
+			var new_xp = TodoManager.player_xp
+			await animate_xp_gain(old_xp, new_xp, old_level, new_level)
+
+			# Show notification after animation
 			if new_level > old_level:
 				show_levelup_notification(quest_title, old_level, new_level, xp, coins)
 			else:
@@ -672,6 +678,82 @@ func _update_active_quests_hud(_quest_id: String):
 		var spacer = Control.new()
 		spacer.custom_minimum_size = Vector2(0, 10)
 		active_quests_list.add_child(spacer)
+
+func animate_xp_gain(start_xp: int, end_xp: int, start_level: int, end_level: int):
+	"""Animate XP bar filling with golden glow effect, handling multiple levels"""
+	var xp_per_level = TodoManager.get_xp_per_level()
+	var current_animated_xp = start_xp
+	var current_animated_level = start_level
+
+	# Show golden glow
+	xp_glow.visible = true
+	var glow_tween = create_tween()
+	glow_tween.tween_property(xp_glow, "modulate:a", 0.6, 0.3)
+
+	# Animation duration per level
+	const FILL_DURATION = 1.0  # Seconds to fill one bar
+
+	# Animate through each level
+	while current_animated_level < end_level:
+		# Calculate how much XP to fill in this level
+		var xp_in_current_level = current_animated_xp % xp_per_level
+		var xp_to_fill = xp_per_level - xp_in_current_level
+
+		# Animate filling this level's bar from current to max
+		var start_value = xp_in_current_level
+		var animation_duration = FILL_DURATION * (xp_to_fill / float(xp_per_level))
+
+		var bar_tween = create_tween()
+		bar_tween.tween_method(
+			func(value):
+				xp_progress.value = value
+				xp_label.text = "%d / %d XP" % [int(value), xp_per_level],
+			start_value,
+			xp_per_level,
+			animation_duration
+		)
+		await bar_tween.finished
+
+		# Level up!
+		current_animated_level += 1
+		current_animated_xp += xp_to_fill
+
+		# Update level label
+		level_label.text = "Level %d" % current_animated_level
+
+		# Brief pause at full bar before resetting
+		await get_tree().create_timer(0.2, true, false, true).timeout
+
+		# Reset bar to 0 for next level (if not final level)
+		if current_animated_level < end_level:
+			xp_progress.value = 0
+
+	# Final level - animate to final XP position
+	var final_xp_in_level = end_xp % xp_per_level
+	var start_xp_in_level = current_animated_xp % xp_per_level
+	var xp_remaining = final_xp_in_level - start_xp_in_level
+
+	if xp_remaining > 0:
+		var animation_duration = FILL_DURATION * (xp_remaining / float(xp_per_level))
+		var final_tween = create_tween()
+		final_tween.tween_method(
+			func(value):
+				xp_progress.value = value
+				xp_label.text = "%d / %d XP" % [int(value), xp_per_level],
+			start_xp_in_level,
+			final_xp_in_level,
+			animation_duration
+		)
+		await final_tween.finished
+
+	# Hide glow effect
+	var hide_glow = create_tween()
+	hide_glow.tween_property(xp_glow, "modulate:a", 0.0, 0.5)
+	await hide_glow.finished
+	xp_glow.visible = false
+
+	# Update gold display
+	gold_label.text = "%d Gold" % TodoManager.player_gold
 
 func _update_player_stats():
 	"""Update player stats display (level, gold, XP bar)"""
