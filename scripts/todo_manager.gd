@@ -23,10 +23,14 @@ func _ready():
 	print("TodoManager initialized")
 	load_todos_from_file()
 
-func load_todos_from_file(file_path: String = "res://sample-todos.json"):
+func load_todos_from_file(file_path: String = "res://todos.json"):
+	# Try todos.json first, fall back to sample if not found
 	if not FileAccess.file_exists(file_path):
 		print("Todo file not found: ", file_path)
-		return
+		file_path = "res://sample-todos.json"
+		if not FileAccess.file_exists(file_path):
+			print("Sample file also not found, no todos to load")
+			return
 
 	var file = FileAccess.open(file_path, FileAccess.READ)
 	if not file:
@@ -44,9 +48,19 @@ func load_todos_from_file(file_path: String = "res://sample-todos.json"):
 		return
 
 	var data = json.data
-	all_todos = data.get("todos", [])
+	var raw_todos = data.get("todos", [])
 
-	print("Loaded %d todos from file" % all_todos.size())
+	# Auto-generate IDs for todos (timestamp + index)
+	var timestamp = Time.get_ticks_msec()
+	all_todos.clear()
+	for i in range(raw_todos.size()):
+		var todo = raw_todos[i].duplicate()
+		# Generate unique ID if not present
+		if not todo.has("id") or todo.get("id", "").is_empty():
+			todo["id"] = "quest_%d_%d" % [timestamp, i]
+		all_todos.append(todo)
+
+	print("Loaded %d todos from file: %s" % [all_todos.size(), file_path])
 	todos_loaded.emit()
 
 func get_available_quests() -> Array:
