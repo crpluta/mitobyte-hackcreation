@@ -14,8 +14,11 @@ List of known bugs and issues to fix in future updates.
 | 4 | Users can **purchase duplicate items**. | Prevent buying items already owned. | 🟡 Open |
 | 5 | **XP growth** lacks animation or visual cue. | Animate and glow XP increase. | 🟡 Open |
 | 6 | **Quest Icon** lacks visual appeal | Add Icon Bounce Effect to draw eye | 🟡 Open |
-| 6 | **Quest Icon** appears too soon | Have the quest icon appear only after the NPC arrives at it's location  | 🟡 Open |
-| 6 | Quest **Key Bindings** feels off  | Rebind quest to L  | 🟡 Open |
+| 7 | **Quest Icon** appears too soon | Have the quest icon appear only after the NPC arrives at it's location  | 🟡 Open |
+| 8 | Quest **Key Bindings** feels off  | Rebind quest to L  | 🟡 Open |
+| 9 | User can leave world boundaries | Prevent user from moving outside world | 🟡 Open |
+| 10 | Modals look bad when over transparent hud | modals should not have a transparent background | 🟡 Open |
+| 11 | All font styling and formatting is broken | UI should respent styling tags such as bold and lists | 🟡 Open |
 
 ---
 
